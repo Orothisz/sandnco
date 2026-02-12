@@ -278,7 +278,7 @@ export default function Home() {
         {/* Changed: Adjusted padding and flex-wrap to ensure visibility on mobile */}
         <nav className="fixed top-0 w-full z-40 px-4 md:px-6 py-4 flex flex-wrap justify-between items-center bg-[#020205]/90 backdrop-blur-md border-b border-white/5">
             <div className="flex items-center gap-2 md:gap-3">
-              <img src="/logo.png" className="w-8 h-8 md:w-10 md:h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
+              <img src="https://ibb.co/JW7P9JS4" className="w-8 h-8 md:w-10 md:h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
               <span className="font-black text-lg md:text-xl italic tracking-tighter text-white">
                 {siteConfig.identity.name}<span className="text-red-600">{siteConfig.identity.domain}</span>
               </span>
