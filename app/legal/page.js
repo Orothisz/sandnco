@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ShieldAlert, FileWarning, Scale, ArrowLeft, Lock } from "lucide-react";
+import { ShieldAlert, FileWarning, Scale, ArrowLeft, Lock, Database } from "lucide-react";
 import Link from "next/link";
 
 export default function Legal() {
@@ -111,6 +111,29 @@ export default function Legal() {
                <p className="text-red-400 font-bold uppercase tracking-widest text-center mt-6">
                  BASICALLY: IF YOU GET CAUGHT, WE DON'T KNOW YOU.
                </p>
+             </div>
+           </section>
+
+           {/* SECTION 5: DATA PRIVACY (NEW) */}
+           <section className="relative pl-0 md:pl-12">
+             <h2 className="text-xl font-bold text-white uppercase mb-4 flex items-center gap-3">
+               <span className="text-red-500">05.</span> The "Black Box" Data Policy
+             </h2>
+             <div className="p-6 bg-[#0a0a15] border border-white/10 rounded text-xs leading-relaxed text-gray-400">
+               <div className="flex items-start gap-4 mb-4">
+                  <Database className="w-6 h-6 text-gray-600 flex-shrink-0 mt-1" />
+                  <div>
+                    <p className="mb-4">
+                      <strong className="text-white">5.1 Data Acquisition:</strong> Yes, we collect your data. We collect your target's data. We probably know what you ate for lunch. This intel is used solely for <span className="text-white font-bold">Mission Execution</span> and refining our "Matchup" algorithms.
+                    </p>
+                    <p className="mb-4">
+                      <strong className="text-white">5.2 The Vault:</strong> Your photos, chat logs, and payment proofs are stored in encrypted silos (Supabase RLS). We do not sell your data to third parties because <span className="bg-red-900/20 text-red-400 px-1">selling data leaves a paper trail</span>, and we hate paper trails.
+                    </p>
+                    <p className="mb-4">
+                      <strong className="text-white">5.3 Burn Notice:</strong> Upon request (or if a Mission goes FUBAR), you may request a "Data Purge." We will wipe your dossier from our servers. However, we cannot wipe the memories of the operatives who saw your cringe pickup lines.
+                    </p>
+                  </div>
+               </div>
              </div>
            </section>
 
