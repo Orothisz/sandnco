@@ -3,24 +3,33 @@
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Initialize Supabase Client (Standard)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export async function submitRequest(formData) {
-  // 1. GET LOGGED IN USER (Auto-Fetch)
-  // We re-initialize supabase with cookies to get the session securely
-  const supabaseAuth = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { cookies: { get: (name) => cookies().get(name)?.value } }
-  );
-  
-  const { data: { user } } = await supabaseAuth.auth.getUser();
-  if (!user) return { success: false, message: "UNAUTHORIZED_ACCESS" };
+  const cookieStore = cookies();
 
-  // 2. EXTRACT DATA
+  // 1. CREATE AUTHENTICATED SUPABASE CLIENT
+  // We need this to pass Row Level Security (RLS) policies
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
+      },
+    },
+  });
+
+  // 2. VERIFY USER SESSION
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, message: "UNAUTHORIZED_ACCESS: PLEASE LOGIN" };
+  }
+
+  // 3. EXTRACT FORM DATA
   const rawData = {
     user_id: user.id,
     user_email: user.email,
@@ -29,6 +38,7 @@ export async function submitRequest(formData) {
     // User Info
     user_phone: formData.get("user_phone"),
     user_insta: formData.get("user_insta"),
+    user_photo_url: formData.get("user_photo_url") || null,
     
     // Target Info
     target_name: formData.get("target_name"),
@@ -36,52 +46,72 @@ export async function submitRequest(formData) {
     target_insta: formData.get("target_insta"),
     target_email: formData.get("target_email"),
     
-    // Specifics
+    // Mission Logistics
     has_specific_target: formData.get("has_specific_target") === 'true',
     reason: formData.get("reason"),
     deadline: formData.get("deadline") || null,
     additional_details: formData.get("details"),
     
-    // Files
-    user_photo_url: formData.get("user_photo_url"),
-    payment_screenshot_url: formData.get("payment_screenshot_url"),
+    // Payments
+    payment_screenshot_url: formData.get("payment_screenshot_url") || null,
+    
+    // Default Status
+    status: "PENDING"
   };
 
-  // 3. SAVE TO SUPABASE
-  const { error } = await supabase.from("requests").insert(rawData);
+  // 4. INSERT INTO DATABASE
+  // We select() the inserted row to get the new 'id' for the Telegram message
+  const { data: insertedData, error } = await supabase
+    .from("requests")
+    .insert(rawData)
+    .select()
+    .single();
 
   if (error) {
-    console.error("DB Error:", error);
+    console.error("Database Error:", error);
     return { success: false, message: error.message };
   }
 
-  // 4. SEND TELEGRAM ALERT
-  // We format this to look like a confidential dossier
-  const tgMessage = `
-🚨 <b>NEW MISSION: ${rawData.service_type.toUpperCase()}</b>
+  const requestID = insertedData.id;
 
-🕵️ <b>CLIENT INTEL:</b>
-📧 Email: ${rawData.user_email}
-📱 Phone: ${rawData.user_phone}
-📸 Insta: ${rawData.user_insta}
+  // 5. PREPARE TELEGRAM MESSAGE
+  // HTML formatting for the "Dossier" look
+  const tgMessage = `
+🚨 <b>NEW MISSION #${requestID}</b>
+➖➖➖➖➖➖➖➖➖➖
+<b>TYPE:</b> <code>${rawData.service_type.toUpperCase()}</code>
+<b>STATUS:</b> ⏳ PENDING REVIEW
+
+🕵️ <b>OPERATIVE (CLIENT):</b>
+📧 ${rawData.user_email}
+📱 ${rawData.user_phone}
+📸 ${rawData.user_insta}
 
 🎯 <b>TARGET INTEL:</b>
-👤 Name: ${rawData.target_name || "N/A"}
-📱 Phone: ${rawData.target_phone || "N/A"}
-📸 Insta: ${rawData.target_insta || "N/A"}
-📧 Email: ${rawData.target_email || "N/A"}
+👤 <b>Name:</b> ${rawData.target_name || "N/A (Algorithm)"}
+📱 <b>Phone:</b> ${rawData.target_phone || "N/A"}
+📸 <b>Insta:</b> ${rawData.target_insta || "N/A"}
 
 📝 <b>MISSION SPECS:</b>
-📅 Deadline: ${rawData.deadline || "ASAP"}
-❓ Specific Target? ${rawData.has_specific_target ? "YES" : "NO"}
-💭 Reason/Details: ${rawData.reason || rawData.additional_details}
+📅 <b>Deadline:</b> ${rawData.deadline || "ASAP"}
+❓ <b>Specific Target?</b> ${rawData.has_specific_target ? "YES" : "NO"}
+💭 <b>Notes:</b> 
+<i>${rawData.reason || rawData.additional_details || "No details provided."}</i>
 
-📂 <b>Evidence/Photos:</b> ${rawData.user_photo_url ? "ATTACHED" : "NONE"}
-💰 <b>Payment:</b> ${rawData.payment_screenshot_url ? "VERIFY SCREENSHOT" : "PENDING/FREE"}
-  `;
+📂 <b>ASSETS:</b>
+📸 <b>User Photo:</b> ${rawData.user_photo_url ? "✅ Attached" : "❌ None"}
+💰 <b>Payment:</b> ${rawData.payment_screenshot_url ? "✅ Attached" : "❌ Pending/Free"}
+➖➖➖➖➖➖➖➖➖➖
+<i>To update status, reply:</i>
+<code>/status ${requestID} ACTIVE</code>
+`;
 
+  // 6. SEND TO TELEGRAM
   try {
-    await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const tgBaseUrl = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
+    
+    // Send Text Message
+    await fetch(`${tgBaseUrl}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -90,19 +120,38 @@ export async function submitRequest(formData) {
         parse_mode: "HTML",
       }),
     });
-    
-    // Send Photo if exists
+
+    // Send User Photo (Matchmaking Evidence)
     if (rawData.user_photo_url) {
-       await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+       await fetch(`${tgBaseUrl}/sendPhoto`, {
          method: "POST",
          headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID, photo: rawData.user_photo_url }),
+         body: JSON.stringify({
+           chat_id: process.env.TELEGRAM_CHAT_ID,
+           photo: rawData.user_photo_url,
+           caption: `📸 Visual Asset for Mission #${requestID} (User)`
+         }),
        });
     }
 
+    // Send Payment Screenshot (if exists)
+    if (rawData.payment_screenshot_url) {
+        await fetch(`${tgBaseUrl}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: process.env.TELEGRAM_CHAT_ID,
+            photo: rawData.payment_screenshot_url,
+            caption: `💰 Payment Proof for Mission #${requestID}`
+          }),
+        });
+     }
+
     return { success: true };
+
   } catch (err) {
-    console.error("Telegram Failed:", err);
+    console.error("Telegram Error:", err);
+    // Return true anyway because the Database save was successful
     return { success: true, warning: "TELEGRAM_FAILED" }; 
   }
 }
