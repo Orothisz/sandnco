@@ -166,7 +166,7 @@ export default function RequestPage() {
                  <h2 className="text-3xl font-black text-white mb-4">VIP CLEARANCE REQUIRED</h2>
                  <p className="text-gray-400 mb-8 max-w-md mx-auto leading-relaxed">
                      This tier involves NDA signatures, 24/7 surveillance teams, and total reality fabrication. 
-                     <br/><span className="text-purple-400 font-mono text-xs mt-2 block">STARTING BUDGET: ₹50,000+</span>
+                     <br/><span className="text-purple-400 font-mono text-xs mt-2 block">STARTING BUDGET: ₹2,700+</span>
                  </p>
                  <div className="flex flex-col gap-4 max-w-xs mx-auto">
                      <a href="mailto:sandnco.lol@gmail.com" className="bg-purple-600 text-white py-4 font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all">
