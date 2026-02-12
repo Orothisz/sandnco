@@ -4,11 +4,23 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Turnstile from "react-turnstile";
 import { createClient } from "@supabase/supabase-js";
-import { AlertTriangle, Lock, Terminal, Loader, CheckCircle, ChevronLeft, Key, Mail, ShieldCheck } from "lucide-react";
+import { 
+  AlertTriangle, 
+  Lock, 
+  Terminal, 
+  Loader, 
+  CheckCircle, 
+  ChevronLeft, 
+  Key, 
+  Mail, 
+  ShieldCheck, 
+  User, 
+  Phone 
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// --- SUPABASE CONFIG (ENV VARS) ---
+// --- SUPABASE CONFIG ---
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -26,6 +38,8 @@ export default function Login() {
   // FORM DATA
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
 
   // --- HANDLERS ---
@@ -47,7 +61,7 @@ export default function Login() {
     }
   };
 
-  // 2. SIGNUP (Requests OTP)
+  // 2. SIGNUP (Includes Username and Phone)
   const handleSignup = async (e) => {
     e.preventDefault();
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED." });
@@ -56,7 +70,13 @@ export default function Login() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: null } // Forces OTP flow if configured in Supabase
+      options: { 
+        data: {
+          username: username,
+          phone_number: phone
+        },
+        emailRedirectTo: null 
+      }
     });
 
     if (error) {
@@ -64,12 +84,12 @@ export default function Login() {
       setLoading(false);
     } else {
       setMode("verify_signup");
-      setMessage({ type: "success", text: "ENCRYPTED CODE SENT TO EMAIL. ENTER IT BELOW." });
+      setMessage({ type: "success", text: "8-DIGIT ENCRYPTED CODE SENT TO EMAIL. ENTER IT BELOW." });
       setLoading(false);
     }
   };
 
-  // 3. VERIFY OTP (For Signup)
+  // 3. VERIFY OTP (For Signup - 8 Digits)
   const handleVerifySignup = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -81,7 +101,7 @@ export default function Login() {
     });
 
     if (error) {
-      setMessage({ type: "error", text: "INVALID CODE." });
+      setMessage({ type: "error", text: "INVALID 8-DIGIT CODE." });
       setLoading(false);
     } else {
       setMessage({ type: "success", text: "IDENTITY VERIFIED. WELCOME." });
@@ -106,7 +126,7 @@ export default function Login() {
     }
   };
 
-  // 5. VERIFY RECOVERY OTP
+  // 5. VERIFY RECOVERY OTP (8 Digits)
   const handleVerifyRecovery = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -127,7 +147,7 @@ export default function Login() {
     }
   };
 
-  // 6. UPDATE PASSWORD (Final Step of Recovery)
+  // 6. UPDATE PASSWORD
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -148,7 +168,7 @@ export default function Login() {
     switch(mode) {
       case 'login': return { title: "Identity Verification", sub: "ENTER CREDENTIALS TO ACCESS DASHBOARD." };
       case 'signup': return { title: "New Operative", sub: "CREATE AN ENCRYPTED PROFILE." };
-      case 'verify_signup': return { title: "Confirm Identity", sub: "ENTER THE 6-DIGIT CODE SENT TO YOUR EMAIL." };
+      case 'verify_signup': return { title: "Confirm Identity", sub: "ENTER THE 8-DIGIT CODE SENT TO YOUR EMAIL." };
       case 'forgot_password': return { title: "Account Recovery", sub: "INITIATE PASSWORD RESET PROTOCOL." };
       case 'verify_recovery': return { title: "Security Check", sub: "ENTER RECOVERY CODE." };
       case 'update_password': return { title: "New Credentials", sub: "SET YOUR NEW PASSWORD." };
@@ -183,7 +203,7 @@ export default function Login() {
                <div className="w-3 h-3 rounded-full bg-green-500/50" />
              </div>
              <div className="text-[10px] text-gray-500 uppercase tracking-widest">
-               SECURE_SHELL_V2.0
+               SECURE_SHELL_V3.0
              </div>
            </div>
 
@@ -215,92 +235,123 @@ export default function Login() {
                )}
              </AnimatePresence>
 
-             {/* --- DYNAMIC FORM --- */}
-             <form className="space-y-6">
-                
-                {/* EMAIL INPUT (Hidden during OTP verification or Password Update) */}
-                {!['verify_signup', 'verify_recovery', 'update_password'].includes(mode) && (
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                      <Mail className="w-3 h-3" /> Alias (Email)
-                    </label>
-                    <input 
-                      type="email" 
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all font-mono"
-                      placeholder="agent@sandnco.lol"
-                    />
-                  </div>
-                )}
+             {/* --- FORM --- */}
+             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+               
+               {/* NEW FIELDS FOR SIGNUP */}
+               {mode === 'signup' && (
+                 <>
+                   <div className="space-y-1">
+                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                       <User className="w-3 h-3" /> Agent Alias (Username)
+                     </label>
+                     <input 
+                       type="text" 
+                       required
+                       value={username}
+                       onChange={(e) => setUsername(e.target.value)}
+                       className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
+                       placeholder="CODENAME"
+                     />
+                   </div>
+                   <div className="space-y-1">
+                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                       <Phone className="w-3 h-3" /> Secure Line (Phone)
+                     </label>
+                     <input 
+                       type="tel" 
+                       required
+                       value={phone}
+                       onChange={(e) => setPhone(e.target.value)}
+                       className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
+                       placeholder="+91"
+                     />
+                   </div>
+                 </>
+               )}
 
-                {/* PASSWORD INPUT */}
-                {['login', 'signup', 'update_password'].includes(mode) && (
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                      <Key className="w-3 h-3" /> {mode === 'update_password' ? 'New Password' : 'Encrypted Key'}
-                    </label>
-                    <input 
-                      type="password" 
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all font-mono"
-                      placeholder="••••••••••••"
-                    />
-                  </div>
-                )}
+               {/* EMAIL INPUT */}
+               {!['verify_signup', 'verify_recovery', 'update_password'].includes(mode) && (
+                 <div className="space-y-1">
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                     <Mail className="w-3 h-3" /> Alias (Email)
+                   </label>
+                   <input 
+                     type="email" 
+                     required
+                     value={email}
+                     onChange={(e) => setEmail(e.target.value)}
+                     className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
+                     placeholder="agent@sandnco.lol"
+                   />
+                 </div>
+               )}
 
-                {/* OTP INPUT */}
-                {['verify_signup', 'verify_recovery'].includes(mode) && (
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                      <ShieldCheck className="w-3 h-3" /> 6-Digit Code
-                    </label>
-                    <input 
-                      type="text" 
-                      required
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
-                      className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-gray-900 transition-all font-mono tracking-[1em] text-center"
-                      placeholder="000000"
-                      maxLength={6}
-                    />
-                  </div>
-                )}
+               {/* PASSWORD INPUT */}
+               {['login', 'signup', 'update_password'].includes(mode) && (
+                 <div className="space-y-1">
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                     <Key className="w-3 h-3" /> {mode === 'update_password' ? 'New Password' : 'Encrypted Key'}
+                   </label>
+                   <input 
+                     type="password" 
+                     required
+                     value={password}
+                     onChange={(e) => setPassword(e.target.value)}
+                     className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
+                     placeholder="••••••••••••"
+                   />
+                 </div>
+               )}
 
-                {/* CAPTCHA (Only for initial Login/Signup) */}
-                {['login', 'signup'].includes(mode) && (
-                  <div className="flex justify-center py-2">
-                    <Turnstile
-                      sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-                      theme="dark"
-                      onVerify={(token) => setTurnstileToken(token)}
-                    />
-                  </div>
-                )}
+               {/* 8-DIGIT OTP INPUT */}
+               {['verify_signup', 'verify_recovery'].includes(mode) && (
+                 <div className="space-y-1">
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
+                     <ShieldCheck className="w-3 h-3" /> 8-Digit Code
+                   </label>
+                   <input 
+                     type="text" 
+                     required
+                     value={otp}
+                     onChange={(e) => setOtp(e.target.value)}
+                     className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-gray-900 transition-all font-mono tracking-[0.6em] text-center"
+                     placeholder="00000000"
+                     maxLength={8}
+                   />
+                 </div>
+               )}
 
-                {/* SUBMIT BUTTON */}
-                <button 
-                  onClick={(e) => {
-                    if (mode === 'login') handleLogin(e);
-                    if (mode === 'signup') handleSignup(e);
-                    if (mode === 'verify_signup') handleVerifySignup(e);
-                    if (mode === 'forgot_password') handleForgotPassword(e);
-                    if (mode === 'verify_recovery') handleVerifyRecovery(e);
-                    if (mode === 'update_password') handleUpdatePassword(e);
-                  }}
-                  disabled={loading}
-                  className="w-full bg-white text-black font-black uppercase py-4 tracking-widest hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : "EXECUTE"}
-                </button>
+               {/* CAPTCHA */}
+               {['login', 'signup'].includes(mode) && (
+                 <div className="flex justify-center py-2">
+                   <Turnstile
+                     sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+                     theme="dark"
+                     onVerify={(token) => setTurnstileToken(token)}
+                   />
+                 </div>
+               )}
+
+               {/* SUBMIT */}
+               <button 
+                 onClick={(e) => {
+                   if (mode === 'login') handleLogin(e);
+                   if (mode === 'signup') handleSignup(e);
+                   if (mode === 'verify_signup') handleVerifySignup(e);
+                   if (mode === 'forgot_password') handleForgotPassword(e);
+                   if (mode === 'verify_recovery') handleVerifyRecovery(e);
+                   if (mode === 'update_password') handleUpdatePassword(e);
+                 }}
+                 disabled={loading}
+                 className="w-full bg-white text-black font-black uppercase py-4 tracking-widest hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+               >
+                 {loading ? <Loader className="w-4 h-4 animate-spin" /> : "EXECUTE"}
+               </button>
              </form>
 
-             {/* NAVIGATION LINKS */}
+             {/* NAV LINKS */}
              <div className="mt-6 flex flex-col gap-3 text-center">
-               
                {mode === 'login' && (
                  <>
                    <button onClick={() => { setMode('signup'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 transition-colors uppercase">
@@ -323,12 +374,11 @@ export default function Login() {
                    ← RETURN TO LOGIN
                  </button>
                )}
-
              </div>
            </div>
            
-           <div className="bg-gray-900 px-4 py-2 border-t border-gray-800 text-[10px] text-gray-600 font-mono text-center">
-             ENCRYPTION: AES-256 // SERVER: {process.env.NEXT_PUBLIC_SUPABASE_URL ? "ONLINE" : "OFFLINE"}
+           <div className="bg-gray-900 px-4 py-2 border-t border-gray-800 text-[10px] text-gray-600 font-mono text-center uppercase">
+             ENCRYPTION: AES-256 // SECTOR 16 HUB
            </div>
         </div>
       </div>
