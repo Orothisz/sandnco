@@ -44,16 +44,24 @@ export default function Login() {
 
   // --- SMART REDIRECT LOGIC ---
   const performSmartRedirect = async (userId) => {
-    // Check if user has any existing requests in the 'requests' table
-    const { data, error, count } = await supabase
-      .from('requests')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+    try {
+      // Check if user has any existing requests in the 'requests' table
+      const { count, error } = await supabase
+        .from('requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
 
-    if (count > 0) {
-      router.push("/dashboard");
-    } else {
-      router.push("/request");
+      if (error) throw error;
+
+      if (count > 0) {
+        return router.push("/dashboard");
+      } else {
+        return router.push("/request");
+      }
+    } catch (err) {
+      console.error("Redirect Error:", err);
+      // Fallback: If DB check fails, send to request page to be safe
+      return router.push("/request");
     }
   };
 
@@ -72,12 +80,11 @@ export default function Login() {
       setLoading(false);
     } else {
       setMessage({ type: "success", text: "ACCESS GRANTED. SCANNING DATABASE..." });
-      // Perform the smart redirect check
       await performSmartRedirect(data.user.id);
     }
   };
 
-  // 2. SIGNUP (Includes Username and Phone + Uniqueness Check)
+  // 2. SIGNUP (Includes Username Uniqueness Check)
   const handleSignup = async (e) => {
     e.preventDefault();
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED." });
@@ -86,11 +93,11 @@ export default function Login() {
     setLoading(true);
 
     // Check if username is already taken in our public profiles
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: checkError } = await supabase
       .from('profiles')
       .select('username')
       .eq('username', username)
-      .single();
+      .maybeSingle();
 
     if (existingUser) {
       setLoading(false);
@@ -134,19 +141,17 @@ export default function Login() {
       setMessage({ type: "error", text: "INVALID 8-DIGIT CODE." });
       setLoading(false);
     } else {
-      setMessage({ type: "success", text: "IDENTITY VERIFIED. REDIRECTING TO ONBOARDING..." });
-      // New users always go to /request since they have 0 requests
-      setTimeout(() => router.push("/request"), 1500);
+      setMessage({ type: "success", text: "IDENTITY VERIFIED. REDIRECTING..." });
+      // New users start with 0 requests, so always go to /request
+      await router.push("/request");
     }
   };
 
-  // 4. FORGOT PASSWORD (Requests OTP)
+  // 4. FORGOT PASSWORD
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
     const { error } = await supabase.auth.resetPasswordForEmail(email);
-    
     if (error) {
       setMessage({ type: "error", text: error.message.toUpperCase() });
       setLoading(false);
@@ -157,17 +162,15 @@ export default function Login() {
     }
   };
 
-  // 5. VERIFY RECOVERY OTP (8 Digits)
+  // 5. VERIFY RECOVERY OTP
   const handleVerifyRecovery = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     const { error } = await supabase.auth.verifyOtp({
       email,
       token: otp,
       type: "recovery"
     });
-
     if (error) {
       setMessage({ type: "error", text: "INVALID RECOVERY CODE." });
       setLoading(false);
@@ -182,9 +185,7 @@ export default function Login() {
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     const { data, error } = await supabase.auth.updateUser({ password: password });
-
     if (error) {
       setMessage({ type: "error", text: "UPDATE FAILED." });
       setLoading(false);
@@ -194,7 +195,6 @@ export default function Login() {
     }
   };
 
-  // --- RENDER HELPERS ---
   const renderHeader = () => {
     switch(mode) {
       case 'login': return { title: "Identity Verification", sub: "ENTER CREDENTIALS TO ACCESS DASHBOARD." };
@@ -209,33 +209,26 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-[#050510] text-gray-200 font-mono flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      
-      {/* BACKGROUND FX */}
       <div className="fixed inset-0 pointer-events-none opacity-20">
          <div className="absolute top-0 left-0 w-full h-1 bg-green-500/50 shadow-[0_0_20px_rgba(0,255,0,0.5)] animate-[scan_3s_linear_infinite]" />
          <div className="w-full h-full bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
       </div>
 
       <div className="relative z-10 w-full max-w-md">
-        
         <Link href="/">
            <button className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-500 mb-8 transition-colors uppercase tracking-widest">
              <ChevronLeft className="w-4 h-4" /> Abort Mission
            </button>
         </Link>
 
-        {/* TERMINAL BOX */}
         <div className="bg-black border border-gray-800 shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden rounded-lg">
-           
            <div className="bg-gray-900 px-4 py-2 border-b border-gray-800 flex justify-between items-center">
              <div className="flex gap-2">
                <div className="w-3 h-3 rounded-full bg-red-500/50" />
                <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
                <div className="w-3 h-3 rounded-full bg-green-500/50" />
              </div>
-             <div className="text-[10px] text-gray-500 uppercase tracking-widest">
-               SECURE_SHELL_V3.0
-             </div>
+             <div className="text-[10px] text-gray-500 uppercase tracking-widest">SECURE_SHELL_V3.0</div>
            </div>
 
            <div className="p-8">
@@ -243,136 +236,68 @@ export default function Login() {
                <div className="inline-block p-3 rounded-full bg-white/5 mb-4 border border-white/10">
                  {mode.includes('verify') ? <ShieldCheck className="w-8 h-8 text-green-500" /> : <Lock className="w-8 h-8 text-white" />}
                </div>
-               <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">
-                 {renderHeader().title}
-               </h1>
+               <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">{renderHeader().title}</h1>
                <p className="text-xs text-gray-500">{renderHeader().sub}</p>
              </div>
 
-             {/* NOTIFICATIONS */}
              <AnimatePresence>
                {message && (
-                 <motion.div 
-                   initial={{ opacity: 0, height: 0 }}
-                   animate={{ opacity: 1, height: "auto" }}
-                   exit={{ opacity: 0, height: 0 }}
-                   className={`mb-6 p-3 text-xs border-l-2 flex items-center gap-3 ${
-                     message.type === 'error' ? 'bg-red-900/20 border-red-500 text-red-400' : 'bg-green-900/20 border-green-500 text-green-400'
-                   }`}
-                 >
+                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className={`mb-6 p-3 text-xs border-l-2 flex items-center gap-3 ${message.type === 'error' ? 'bg-red-900/20 border-red-500 text-red-400' : 'bg-green-900/20 border-green-500 text-green-400'}`}>
                    {message.type === 'error' ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                    {message.text}
                  </motion.div>
                )}
              </AnimatePresence>
 
-             {/* --- FORM --- */}
              <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-               
-               {/* NEW FIELDS FOR SIGNUP */}
                {mode === 'signup' && (
                  <>
                    <div className="space-y-1">
-                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                       <User className="w-3 h-3" /> Agent Alias (Username)
-                     </label>
-                     <input 
-                       type="text" 
-                       required
-                       value={username}
-                       onChange={(e) => setUsername(e.target.value)}
-                       className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
-                       placeholder="CODENAME"
-                     />
+                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><User className="w-3 h-3" /> Agent Alias</label>
+                     <input type="text" required value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="CODENAME" />
                    </div>
                    <div className="space-y-1">
-                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                       <Phone className="w-3 h-3" /> Secure Line (Phone)
-                     </label>
-                     <input 
-                       type="tel" 
-                       required
-                       value={phone}
-                       onChange={(e) => setPhone(e.target.value)}
-                       className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
-                       placeholder="+91"
-                     />
+                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Phone className="w-3 h-3" /> Secure Line</label>
+                     <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="+91" />
                    </div>
                  </>
                )}
 
-               {/* EMAIL INPUT */}
                {!['verify_signup', 'verify_recovery', 'update_password'].includes(mode) && (
                  <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                     <Mail className="w-3 h-3" /> Alias (Email)
-                   </label>
-                   <input 
-                     type="email" 
-                     required
-                     value={email}
-                     onChange={(e) => setEmail(e.target.value)}
-                     className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
-                     placeholder="agent@sandnco.lol"
-                   />
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Mail className="w-3 h-3" /> Alias (Email)</label>
+                   <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="agent@sandnco.lol" />
                  </div>
                )}
 
-               {/* PASSWORD INPUT */}
                {['login', 'signup', 'update_password'].includes(mode) && (
                  <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                     <Key className="w-3 h-3" /> {mode === 'update_password' ? 'New Password' : 'Encrypted Key'}
-                   </label>
-                   <input 
-                     type="password" 
-                     required
-                     value={password}
-                     onChange={(e) => setPassword(e.target.value)}
-                     className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all"
-                     placeholder="••••••••••••"
-                   />
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Key className="w-3 h-3" /> Keyphrase</label>
+                   <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="••••••••••••" />
                  </div>
                )}
 
-               {/* 8-DIGIT OTP INPUT */}
                {['verify_signup', 'verify_recovery'].includes(mode) && (
                  <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                     <ShieldCheck className="w-3 h-3" /> 8-Digit Code
-                   </label>
-                   <input 
-                     type="text" 
-                     required
-                     value={otp}
-                     onChange={(e) => setOtp(e.target.value)}
-                     className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-gray-900 transition-all font-mono tracking-[0.6em] text-center"
-                     placeholder="00000000"
-                     maxLength={8}
-                   />
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><ShieldCheck className="w-3 h-3" /> 8-Digit Code</label>
+                   <input type="text" required value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-gray-900 transition-all font-mono tracking-[0.6em] text-center" placeholder="00000000" maxLength={8} />
                  </div>
                )}
 
-               {/* CAPTCHA */}
                {['login', 'signup'].includes(mode) && (
                  <div className="flex justify-center py-2">
-                   <Turnstile
-                     sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-                     theme="dark"
-                     onVerify={(token) => setTurnstileToken(token)}
-                   />
+                   <Turnstile sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY} theme="dark" onVerify={(token) => setTurnstileToken(token)} />
                  </div>
                )}
 
-               {/* SUBMIT */}
                <button 
                  onClick={(e) => {
                    if (mode === 'login') handleLogin(e);
-                   if (mode === 'signup') handleSignup(e);
-                   if (mode === 'verify_signup') handleVerifySignup(e);
-                   if (mode === 'forgot_password') handleForgotPassword(e);
-                   if (mode === 'verify_recovery') handleVerifyRecovery(e);
-                   if (mode === 'update_password') handleUpdatePassword(e);
+                   else if (mode === 'signup') handleSignup(e);
+                   else if (mode === 'verify_signup') handleVerifySignup(e);
+                   else if (mode === 'forgot_password') handleForgotPassword(e);
+                   else if (mode === 'verify_recovery') handleVerifyRecovery(e);
+                   else if (mode === 'update_password') handleUpdatePassword(e);
                  }}
                  disabled={loading}
                  className="w-full bg-white text-black font-black uppercase py-4 tracking-widest hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -381,36 +306,23 @@ export default function Login() {
                </button>
              </form>
 
-             {/* NAV LINKS */}
              <div className="mt-6 flex flex-col gap-3 text-center">
                {mode === 'login' && (
                  <>
-                   <button onClick={() => { setMode('signup'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 transition-colors uppercase">
-                     NO CLEARANCE? REGISTER HERE.
-                   </button>
-                   <button onClick={() => { setMode('forgot_password'); setMessage(null); }} className="text-[10px] text-red-900 hover:text-red-500 transition-colors uppercase">
-                     FORGOT CREDENTIALS?
-                   </button>
+                   <button onClick={() => { setMode('signup'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 transition-colors uppercase">NO CLEARANCE? REGISTER HERE.</button>
+                   <button onClick={() => { setMode('forgot_password'); setMessage(null); }} className="text-[10px] text-red-900 hover:text-red-500 transition-colors uppercase">FORGOT CREDENTIALS?</button>
                  </>
                )}
-
                {mode === 'signup' && (
-                 <button onClick={() => { setMode('login'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 transition-colors uppercase">
-                   ALREADY AN AGENT? LOGIN.
-                 </button>
+                 <button onClick={() => { setMode('login'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 transition-colors uppercase">ALREADY AN AGENT? LOGIN.</button>
                )}
-
                {(mode === 'verify_signup' || mode === 'forgot_password' || mode === 'verify_recovery') && (
-                 <button onClick={() => { setMode('login'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white transition-colors uppercase">
-                   ← RETURN TO LOGIN
-                 </button>
+                 <button onClick={() => { setMode('login'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white transition-colors uppercase">← RETURN TO LOGIN</button>
                )}
              </div>
            </div>
            
-           <div className="bg-gray-900 px-4 py-2 border-t border-gray-800 text-[10px] text-gray-600 font-mono text-center uppercase">
-             ENCRYPTION: AES-256 // SECTOR 16 HUB
-           </div>
+           <div className="bg-gray-900 px-4 py-2 border-t border-gray-800 text-[10px] text-gray-600 font-mono text-center uppercase">ENCRYPTION: AES-256 // SECTOR 16 HUB</div>
         </div>
       </div>
       
