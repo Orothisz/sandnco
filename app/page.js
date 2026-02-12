@@ -278,7 +278,7 @@ export default function Home() {
         {/* Changed: Adjusted padding and flex-wrap to ensure visibility on mobile */}
         <nav className="fixed top-0 w-full z-40 px-4 md:px-6 py-4 flex flex-wrap justify-between items-center bg-[#020205]/90 backdrop-blur-md border-b border-white/5">
             <div className="flex items-center gap-2 md:gap-3">
-              <img src="https://ibb.co/JW7P9JS4" className="w-8 h-8 md:w-10 md:h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
+              <img src="/logo.png" className="w-8 h-8 md:w-10 md:h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
               <span className="font-black text-lg md:text-xl italic tracking-tighter text-white">
                 {siteConfig.identity.name}<span className="text-red-600">{siteConfig.identity.domain}</span>
               </span>
@@ -330,7 +330,7 @@ export default function Home() {
 
         {/* --- HERO SECTION --- */}
         <section className="relative min-h-screen flex flex-col justify-center items-center pt-24 md:pt-20 px-4 overflow-hidden">
-          <motion.div style={{ y }} className="relative z-10 text-center max-w-7xl">
+          <motion.div style={{ y }} className="relative z-10 text-center max-w-7xl w-full">
             
             <div className="inline-flex items-center gap-2 px-4 py-1 border border-yellow-500/30 bg-yellow-900/20 rounded-full mb-8 backdrop-blur-md animate-pulse">
                <Siren className="w-4 h-4 text-yellow-500" />
@@ -339,7 +339,8 @@ export default function Home() {
                </span>
             </div>
 
-            <h1 className="text-[12vw] leading-[0.8] font-black tracking-tighter mb-6 relative select-none">
+            {/* MANUFACTURED COINCIDENCES TEXT FIX */}
+            <h1 className="text-[10vw] md:text-[12vw] leading-[0.8] font-black tracking-tighter mb-6 relative select-none break-words w-full">
                <span className="block text-transparent bg-clip-text bg-gradient-to-b from-white via-gray-200 to-gray-600">
                  {siteConfig.hero.line1}
                </span>
