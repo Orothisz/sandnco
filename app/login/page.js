@@ -42,6 +42,21 @@ export default function Login() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
 
+  // --- SMART REDIRECT LOGIC ---
+  const performSmartRedirect = async (userId) => {
+    // Check if user has any existing requests in the 'requests' table
+    const { data, error, count } = await supabase
+      .from('requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+
+    if (count > 0) {
+      router.push("/dashboard");
+    } else {
+      router.push("/request");
+    }
+  };
+
   // --- HANDLERS ---
 
   // 1. LOGIN
@@ -50,23 +65,38 @@ export default function Login() {
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED. VERIFY CAPTCHA." });
     
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     
     if (error) {
       setMessage({ type: "error", text: error.message.toUpperCase() });
       setLoading(false);
     } else {
-      setMessage({ type: "success", text: "ACCESS GRANTED. REDIRECTING..." });
-      setTimeout(() => router.push("/dashboard"), 1500);
+      setMessage({ type: "success", text: "ACCESS GRANTED. SCANNING DATABASE..." });
+      // Perform the smart redirect check
+      await performSmartRedirect(data.user.id);
     }
   };
 
-  // 2. SIGNUP (Includes Username and Phone)
+  // 2. SIGNUP (Includes Username and Phone + Uniqueness Check)
   const handleSignup = async (e) => {
     e.preventDefault();
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED." });
+    if (username.length < 3) return setMessage({ type: "error", text: "USERNAME TOO SHORT." });
 
     setLoading(true);
+
+    // Check if username is already taken in our public profiles
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username)
+      .single();
+
+    if (existingUser) {
+      setLoading(false);
+      return setMessage({ type: "error", text: "USERNAME ALREADY TAKEN BY ANOTHER AGENT." });
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -94,7 +124,7 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       email,
       token: otp,
       type: "signup"
@@ -104,8 +134,9 @@ export default function Login() {
       setMessage({ type: "error", text: "INVALID 8-DIGIT CODE." });
       setLoading(false);
     } else {
-      setMessage({ type: "success", text: "IDENTITY VERIFIED. WELCOME." });
-      setTimeout(() => router.push("/dashboard"), 1500);
+      setMessage({ type: "success", text: "IDENTITY VERIFIED. REDIRECTING TO ONBOARDING..." });
+      // New users always go to /request since they have 0 requests
+      setTimeout(() => router.push("/request"), 1500);
     }
   };
 
@@ -152,14 +183,14 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({ password: password });
+    const { data, error } = await supabase.auth.updateUser({ password: password });
 
     if (error) {
       setMessage({ type: "error", text: "UPDATE FAILED." });
       setLoading(false);
     } else {
-      setMessage({ type: "success", text: "PASSWORD RESET. LOGGING IN..." });
-      setTimeout(() => router.push("/dashboard"), 1500);
+      setMessage({ type: "success", text: "PASSWORD RESET. ACCESSING TERMINAL..." });
+      await performSmartRedirect(data.user.id);
     }
   };
 
