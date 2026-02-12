@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Turnstile from "react-turnstile";
-// Change: Import the component client for Next.js
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   AlertTriangle, 
   Lock, 
-  Terminal, 
   Loader, 
   CheckCircle, 
   ChevronLeft, 
@@ -24,7 +22,6 @@ import { useRouter } from "next/navigation";
 
 export default function Login() {
   const router = useRouter();
-  // Initialize the specific Next.js Supabase client
   const supabase = createClientComponentClient();
   
   const [mode, setMode] = useState("login"); 
@@ -39,11 +36,12 @@ export default function Login() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
 
-  // --- SMART REDIRECT ---
+  // ------------------------------------------------
+  // SMART REDIRECT (HOME-FIRST LOGIC)
+  // ------------------------------------------------
   const performSmartRedirect = async (userId) => {
     try {
-      // Logic: If they have 0 requests, they are a new user -> /request
-      // Logic: If they have 1+ requests, they are an active agent -> /dashboard
+      // Check for existing requests to identify returning agents
       const { count, error } = await supabase
         .from("requests")
         .select("id", { count: "exact", head: true })
@@ -51,18 +49,22 @@ export default function Login() {
 
       if (error) throw error;
 
-      const destination = count && count > 0 ? "/dashboard" : "/request";
+      // Logic: New users (count 0) go to /request. Returning users go to Home (/) to fix loops
+      const destination = (count && count > 0) ? "/" : "/request";
       
-      // Use window.location.assign to force the middleware to re-evaluate the new cookie
-      window.location.assign(destination);
+      // Hard redirect to ensure Middleware processes the session cookie
+      window.location.href = destination;
 
     } catch (err) {
       console.error("Redirect logic failed:", err);
-      window.location.assign("/request");
+      window.location.href = "/";
     }
   };
 
-  // --- HANDLERS ---
+  // ------------------------------------------------
+  // HANDLERS
+  // ------------------------------------------------
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED. VERIFY CAPTCHA." });
@@ -86,7 +88,6 @@ export default function Login() {
 
     setLoading(true);
 
-    // Check Alias Uniqueness in profiles
     const { data: existingUser } = await supabase
       .from("profiles")
       .select("username")
@@ -120,11 +121,7 @@ export default function Login() {
   const handleVerifySignup = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: "signup"
-    });
+    const { data, error } = await supabase.auth.verifyOtp({ email, token: otp, type: "signup" });
 
     if (error) {
       setMessage({ type: "error", text: "INVALID 8-DIGIT CODE." });
@@ -178,12 +175,12 @@ export default function Login() {
 
   const renderHeader = () => {
     switch(mode) {
-      case 'login': return { title: "Identity Verification", sub: "ENTER CREDENTIALS TO ACCESS DASHBOARD." };
-      case 'signup': return { title: "New Operative", sub: "CREATE AN ENCRYPTED PROFILE." };
-      case 'verify_signup': return { title: "Confirm Identity", sub: "ENTER THE 8-DIGIT CODE SENT TO YOUR EMAIL." };
-      case 'forgot_password': return { title: "Account Recovery", sub: "INITIATE PASSWORD RESET PROTOCOL." };
-      case 'verify_recovery': return { title: "Security Check", sub: "ENTER RECOVERY CODE." };
-      case 'update_password': return { title: "New Credentials", sub: "SET YOUR NEW PASSWORD." };
+      case 'login': return { title: "Identity Verification", sub: "ENTER CREDENTIALS." };
+      case 'signup': return { title: "New Operative", sub: "REGISTERING NEW AGENT." };
+      case 'verify_signup': return { title: "Confirm Identity", sub: "ENTER THE 8-DIGIT CODE." };
+      case 'forgot_password': return { title: "Recovery", sub: "RESETTING PASSWORD." };
+      case 'verify_recovery': return { title: "Security Check", sub: "VERIFYING CODE." };
+      case 'update_password': return { title: "Credentials", sub: "UPDATING PASSWORD." };
       default: return { title: "System Error", sub: "REBOOT REQUIRED." };
     }
   };
@@ -196,7 +193,7 @@ export default function Login() {
               <img src="https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png" className="w-12 h-12" alt="wiki"/>
               <h1 className="text-3xl font-serif">Cat</h1>
           </div>
-          <p className="mb-4">The <b>cat</b> (<i>Felis catus</i>) is a domestic species of small carnivorous mammal. It is the only domesticated species in the family Felidae.</p>
+          <p className="mb-4">The <b>cat</b> (<i>Felis catus</i>) is a domestic species of small carnivorous mammal.</p>
           <button onClick={() => setSafeMode(false)} className="mt-8 text-blue-600 hover:underline text-xs">(Restore Session)</button>
         </div>
       </div>
@@ -205,25 +202,20 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-[#050510] text-gray-200 font-mono flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      
-      {/* BACKGROUND FX */}
       <div className="fixed inset-0 pointer-events-none opacity-20">
          <div className="absolute top-0 left-0 w-full h-1 bg-green-500/50 shadow-[0_0_20px_rgba(0,255,0,0.5)] animate-[scan_3s_linear_infinite]" />
          <div className="w-full h-full bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
       </div>
 
       <div className="relative z-10 w-full max-w-md">
-        
         <Link href="/">
            <button className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-500 mb-8 transition-colors uppercase tracking-widest">
              <ChevronLeft className="w-4 h-4" /> Abort Mission
            </button>
         </Link>
 
-        {/* TERMINAL BOX */}
         <div className="bg-black border border-gray-800 shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden rounded-lg">
-           
-           <div className="bg-gray-900 px-4 py-2 border-b border-gray-800 flex justify-between items-center">
+           <div className="bg-gray-900 px-4 py-2 border-b border-gray-800 flex justify-between items-center font-bold">
              <div className="flex gap-2">
                <div className="w-3 h-3 rounded-full bg-red-500/50" />
                <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
@@ -251,7 +243,6 @@ export default function Login() {
              </AnimatePresence>
 
              <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-               
                {mode === 'signup' && (
                  <>
                    <div className="space-y-1">
@@ -264,46 +255,37 @@ export default function Login() {
                    </div>
                  </>
                )}
-
                {!['verify_signup', 'verify_recovery', 'update_password'].includes(mode) && (
                  <div className="space-y-1">
                    <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Mail className="w-3 h-3" /> Alias (Email)</label>
                    <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="agent@sandnco.lol" />
                  </div>
                )}
-
                {['login', 'signup', 'update_password'].includes(mode) && (
                  <div className="space-y-1">
                    <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Key className="w-3 h-3" /> {mode === 'update_password' ? 'New Password' : 'Keyphrase'}</label>
                    <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="••••••••" />
                  </div>
                )}
-
                {['verify_signup', 'verify_recovery'].includes(mode) && (
                  <div className="space-y-1">
                    <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><ShieldCheck className="w-3 h-3" /> 8-Digit Code</label>
                    <input type="text" required value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-gray-900 transition-all font-mono tracking-[0.6em] text-center" placeholder="00000000" maxLength={8} />
                  </div>
                )}
-
                {['login', 'signup'].includes(mode) && (
                  <div className="flex justify-center py-2">
                    <Turnstile sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY} theme="dark" onVerify={(token) => setTurnstileToken(token)} />
                  </div>
                )}
-
-               <button 
-                 onClick={(e) => {
+               <button onClick={(e) => {
                    if (mode === 'login') handleLogin(e);
                    else if (mode === 'signup') handleSignup(e);
                    else if (mode === 'verify_signup') handleVerifySignup(e);
                    else if (mode === 'forgot_password') handleForgotPassword(e);
                    else if (mode === 'verify_recovery') handleVerifyRecovery(e);
                    else if (mode === 'update_password') handleUpdatePassword(e);
-                 }}
-                 disabled={loading}
-                 className="w-full bg-white text-black font-black uppercase py-4 tracking-widest hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-               >
+                 }} disabled={loading} className="w-full bg-white text-black font-black uppercase py-4 tracking-widest hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : "EXECUTE"}
                </button>
              </form>
