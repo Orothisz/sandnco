@@ -3,19 +3,17 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, Camera, Calendar, Instagram, Phone, Mail, User, HeartCrack, Heart, Search, Lock, CheckCircle, Loader, AlertTriangle, FileWarning } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
+// Change: Swapped to the Next.js Auth Helper client
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { submitRequest } from "../actions";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// Init Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
 export default function RequestPage() {
   const router = useRouter();
+  // Change: Initialize the component-specific client
+  const supabase = createClientComponentClient();
+  
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
@@ -35,16 +33,17 @@ export default function RequestPage() {
   // AUTH LOCK
   useEffect(() => {
     const checkUser = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        // Change: Using getSession ensures cookies are checked
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
             router.push("/login"); 
         } else {
-            setUserEmail(user.email);
+            setUserEmail(session.user.email);
             setCheckingAuth(false);
         }
     };
     checkUser();
-  }, []);
+  }, [router, supabase]);
 
   // Universal Upload Helper
   const uploadFile = async (file, bucket) => {
@@ -78,8 +77,12 @@ export default function RequestPage() {
 
       const result = await submitRequest(formData);
       
-      if (result.success) setSuccess(true);
-      else alert("SYSTEM ERROR: " + result.message);
+      if (result.success) {
+        setSuccess(true);
+      } else {
+        // Handle the specific authorization error message
+        alert("SYSTEM ERROR: " + (result.error || result.message || "UNAUTHORIZED"));
+      }
 
     } catch (err) {
       alert("UPLOAD ERROR: " + err.message);
