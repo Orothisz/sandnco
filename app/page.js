@@ -45,7 +45,7 @@ const siteConfig = {
   services: [
     {
       id: "breakup",
-      title: "SCORCHED EARTH",
+      title: "SCORCHED EARTH (BREAKUP)",
       price: "₹0",
       originalPrice: "₹999",
       icon: <Skull className="w-6 h-6" />,
@@ -58,7 +58,7 @@ const siteConfig = {
     },
     {
       id: "patchup",
-      title: "PSY-OP RECOVERY",
+      title: "PSY-OP RECOVERY (PATCHUP)",
       price: "₹0",
       originalPrice: "₹1,499",
       icon: <Fingerprint className="w-6 h-6" />,
@@ -71,7 +71,7 @@ const siteConfig = {
     },
     {
       id: "matchup",
-      title: "FORCED FATE",
+      title: "FORCED FATE (MATCHUP)",
       price: "₹0",
       originalPrice: "₹1,999",
       icon: <Eye className="w-6 h-6" />,
@@ -84,9 +84,9 @@ const siteConfig = {
     },
     {
       id: "vip",
-      title: "GOD COMPLEX",
+      title: "GOD COMPLEX (EXCLUSIVE)",
       price: "₹0",
-      originalPrice: "₹50,000",
+      originalPrice: "₹2,700",
       icon: <Lock className="w-6 h-6" />,
       tagline: "TOTAL CONTROL",
       desc: "Full reality distortion field. We control the weather of your love life.",
