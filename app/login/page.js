@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Turnstile from "react-turnstile";
-import { createClient } from "@supabase/supabase-js";
+// Change: Import the component client for Next.js
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   AlertTriangle, 
   Lock, 
@@ -21,68 +22,47 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// --- SUPABASE CONFIG ---
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
 export default function Login() {
   const router = useRouter();
+  // Initialize the specific Next.js Supabase client
+  const supabase = createClientComponentClient();
   
-  // MODES: 'login' | 'signup' | 'verify_signup' | 'forgot_password' | 'verify_recovery' | 'update_password'
   const [mode, setMode] = useState("login"); 
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState(null);
   const [message, setMessage] = useState(null); 
   const [safeMode, setSafeMode] = useState(false);
 
-  // FORM DATA
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
 
-  // ------------------------------------------------
-  // SMART REDIRECT (FIXED FOR INSTANT LOAD)
-  // ------------------------------------------------
- // ------------------------------------------------
-  // SMART REDIRECT (HARD RESET VERSION)
-  // ------------------------------------------------
+  // --- SMART REDIRECT ---
   const performSmartRedirect = async (userId) => {
     try {
-      console.log("Initiating Scan for User:", userId);
-
-      // Check if user has any existing requests
+      // Logic: If they have 0 requests, they are a new user -> /request
+      // Logic: If they have 1+ requests, they are an active agent -> /dashboard
       const { count, error } = await supabase
         .from("requests")
-        .select("id", { count: "exact" })
+        .select("id", { count: "exact", head: true })
         .eq("user_id", userId);
 
-      if (error) {
-        console.error("Supabase Error:", error.message);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Determine Destination
       const destination = count && count > 0 ? "/dashboard" : "/request";
       
-      console.log(`Mission Identified. Navigating to: ${destination}`);
-
-      // HARD REDIRECT: This fixes the "Stuck" issue by bypassing the router cache
+      // Use window.location.assign to force the middleware to re-evaluate the new cookie
       window.location.assign(destination);
 
     } catch (err) {
-      console.error("Redirect Critical Failure:", err);
-      // Fallback: If everything fails, force them to the request page
+      console.error("Redirect logic failed:", err);
       window.location.assign("/request");
     }
   };
-  // ------------------------------------------------
-  // HANDLERS
-  // ------------------------------------------------
 
+  // --- HANDLERS ---
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED. VERIFY CAPTCHA." });
@@ -94,7 +74,7 @@ export default function Login() {
       setMessage({ type: "error", text: error.message.toUpperCase() });
       setLoading(false);
     } else {
-      setMessage({ type: "success", text: "ACCESS GRANTED. SCANNING DATABASE..." });
+      setMessage({ type: "success", text: "ACCESS GRANTED. SYNCING SESSION..." });
       await performSmartRedirect(data.user.id);
     }
   };
@@ -102,11 +82,11 @@ export default function Login() {
   const handleSignup = async (e) => {
     e.preventDefault();
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED." });
-    if (username.length < 3) return setMessage({ type: "error", text: "USERNAME TOO SHORT." });
+    if (username.length < 3) return setMessage({ type: "error", text: "ALIAS TOO SHORT." });
 
     setLoading(true);
 
-    // Username Uniqueness Check
+    // Check Alias Uniqueness in profiles
     const { data: existingUser } = await supabase
       .from("profiles")
       .select("username")
@@ -115,7 +95,7 @@ export default function Login() {
 
     if (existingUser) {
       setLoading(false);
-      return setMessage({ type: "error", text: "USERNAME ALREADY TAKEN BY ANOTHER AGENT." });
+      return setMessage({ type: "error", text: "ALIAS ALREADY TAKEN BY ANOTHER AGENT." });
     }
 
     const { error } = await supabase.auth.signUp({
@@ -123,7 +103,7 @@ export default function Login() {
       password,
       options: { 
         data: { username, phone_number: phone },
-        emailRedirectTo: null 
+        emailRedirectTo: `${window.location.origin}/auth/callback`
       }
     });
 
@@ -132,7 +112,7 @@ export default function Login() {
       setLoading(false);
     } else {
       setMode("verify_signup");
-      setMessage({ type: "success", text: "8-DIGIT ENCRYPTED CODE SENT TO EMAIL. ENTER IT BELOW." });
+      setMessage({ type: "success", text: "8-DIGIT CODE SENT TO EMAIL. CHECK INBOX." });
       setLoading(false);
     }
   };
@@ -164,7 +144,7 @@ export default function Login() {
       setLoading(false);
     } else {
       setMode("verify_recovery");
-      setMessage({ type: "success", text: "RECOVERY CODE SENT. CHECK INBOX." });
+      setMessage({ type: "success", text: "RECOVERY CODE SENT." });
       setLoading(false);
     }
   };
@@ -172,13 +152,9 @@ export default function Login() {
   const handleVerifyRecovery = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: "recovery"
-    });
+    const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: "recovery" });
     if (error) {
-      setMessage({ type: "error", text: "INVALID RECOVERY CODE." });
+      setMessage({ type: "error", text: "INVALID CODE." });
       setLoading(false);
     } else {
       setMode("update_password");
@@ -212,7 +188,6 @@ export default function Login() {
     }
   };
 
-  // --- PANIC MODE FALLBACK ---
   if (safeMode) {
     return (
       <div className="fixed inset-0 z-[9999] bg-white text-black font-serif p-8 overflow-auto">
@@ -220,11 +195,6 @@ export default function Login() {
           <div className="border-b pb-4 mb-4 flex items-center gap-4">
               <img src="https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png" className="w-12 h-12" alt="wiki"/>
               <h1 className="text-3xl font-serif">Cat</h1>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">From Wikipedia, the free encyclopedia</p>
-          <div className="float-right border border-gray-300 p-2 mb-4 ml-4 bg-gray-50 w-64 text-xs">
-            <img src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=300" className="w-full mb-2" alt="cat"/>
-            <p>The domestic cat (Felis catus).</p>
           </div>
           <p className="mb-4">The <b>cat</b> (<i>Felis catus</i>) is a domestic species of small carnivorous mammal. It is the only domesticated species in the family Felidae.</p>
           <button onClick={() => setSafeMode(false)} className="mt-8 text-blue-600 hover:underline text-xs">(Restore Session)</button>
@@ -259,9 +229,7 @@ export default function Login() {
                <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
                <div className="w-3 h-3 rounded-full bg-green-500/50" />
              </div>
-             <div className="text-[10px] text-gray-500 uppercase tracking-widest">
-               SECURE_SHELL_V3.0
-             </div>
+             <div className="text-[10px] text-gray-500 uppercase tracking-widest">SECURE_SHELL_V3.0</div>
            </div>
 
            <div className="p-8">
@@ -269,22 +237,13 @@ export default function Login() {
                <div className="inline-block p-3 rounded-full bg-white/5 mb-4 border border-white/10">
                  {mode.includes('verify') ? <ShieldCheck className="w-8 h-8 text-green-500" /> : <Lock className="w-8 h-8 text-white" />}
                </div>
-               <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">
-                 {renderHeader().title}
-               </h1>
+               <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">{renderHeader().title}</h1>
                <p className="text-xs text-gray-500">{renderHeader().sub}</p>
              </div>
 
              <AnimatePresence>
                {message && (
-                 <motion.div 
-                   initial={{ opacity: 0, height: 0 }}
-                   animate={{ opacity: 1, height: "auto" }}
-                   exit={{ opacity: 0, height: 0 }}
-                   className={`mb-6 p-3 text-xs border-l-2 flex items-center gap-3 ${
-                     message.type === 'error' ? 'bg-red-900/20 border-red-500 text-red-400' : 'bg-green-900/20 border-green-500 text-green-400'
-                   }`}
-                 >
+                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className={`mb-6 p-3 text-xs border-l-2 flex items-center gap-3 ${message.type === 'error' ? 'bg-red-900/20 border-red-500 text-red-400' : 'bg-green-900/20 border-green-500 text-green-400'}`}>
                    {message.type === 'error' ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                    {message.text}
                  </motion.div>
@@ -296,15 +255,11 @@ export default function Login() {
                {mode === 'signup' && (
                  <>
                    <div className="space-y-1">
-                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                       <User className="w-3 h-3" /> Agent Alias
-                     </label>
+                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><User className="w-3 h-3" /> Agent Alias</label>
                      <input type="text" required value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="CODENAME" />
                    </div>
                    <div className="space-y-1">
-                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                       <Phone className="w-3 h-3" /> Secure Line
-                     </label>
+                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Phone className="w-3 h-3" /> Secure Line</label>
                      <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="+91" />
                    </div>
                  </>
@@ -312,27 +267,21 @@ export default function Login() {
 
                {!['verify_signup', 'verify_recovery', 'update_password'].includes(mode) && (
                  <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                     <Mail className="w-3 h-3" /> Alias (Email)
-                   </label>
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Mail className="w-3 h-3" /> Alias (Email)</label>
                    <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="agent@sandnco.lol" />
                  </div>
                )}
 
                {['login', 'signup', 'update_password'].includes(mode) && (
                  <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                     <Key className="w-3 h-3" /> {mode === 'update_password' ? 'New Password' : 'Keyphrase'}
-                   </label>
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Key className="w-3 h-3" /> {mode === 'update_password' ? 'New Password' : 'Keyphrase'}</label>
                    <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="••••••••" />
                  </div>
                )}
 
                {['verify_signup', 'verify_recovery'].includes(mode) && (
                  <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2">
-                     <ShieldCheck className="w-3 h-3" /> 8-Digit Code
-                   </label>
+                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><ShieldCheck className="w-3 h-3" /> 8-Digit Code</label>
                    <input type="text" required value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-gray-900 transition-all font-mono tracking-[0.6em] text-center" placeholder="00000000" maxLength={8} />
                  </div>
                )}
@@ -359,7 +308,7 @@ export default function Login() {
                </button>
              </form>
 
-             <div className="mt-6 flex flex-col gap-3 text-center">
+             <div className="mt-6 flex flex-col gap-3 text-center font-bold">
                {mode === 'login' && (
                  <>
                    <button onClick={() => { setMode('signup'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 transition-colors uppercase">NO CLEARANCE? REGISTER.</button>
@@ -379,12 +328,7 @@ export default function Login() {
         </div>
       </div>
       
-      {/* PANIC BUTTON */}
-      <button
-        onClick={() => setSafeMode(true)}
-        className="fixed bottom-6 right-6 z-50 w-12 h-12 bg-red-600 rounded-full border-4 border-red-900 flex items-center justify-center text-white shadow-lg hover:scale-110 transition-all group"
-        title="PANIC"
-      >
+      <button onClick={() => setSafeMode(true)} className="fixed bottom-6 right-6 z-50 w-12 h-12 bg-red-600 rounded-full border-4 border-red-900 flex items-center justify-center text-white shadow-lg hover:scale-110 transition-all group" title="PANIC">
         <Eye className="w-5 h-5" />
       </button>
 
