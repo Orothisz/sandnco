@@ -49,25 +49,30 @@ export default function Login() {
   // ------------------------------------------------
   const performSmartRedirect = async (userId) => {
     try {
+      // Ensure we are strictly checking the 'requests' table for this specific user
       const { count, error } = await supabase
         .from("requests")
-        .select("id", { count: "exact" })
+        .select("id", { count: "exact", head: true })
         .eq("user_id", userId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Query Error:", error.message);
+        throw error;
+      }
 
-      const destination = count && count > 0 ? "/dashboard" : "/request";
+      // Logic: If they have 0 requests, they are a new or inactive user -> /request
+      // Logic: If they have 1+ requests, they are an active agent -> /dashboard
+      const destination = (count && count > 0) ? "/dashboard" : "/request";
       
-      router.replace(destination);
-      router.refresh();
+      console.log(`Redirecting to: ${destination}`); // Debugging log
+      router.push(destination);
 
     } catch (err) {
-      console.error("Redirect error:", err);
-      setMessage({ type: "error", text: "DATABASE SCAN FAILED. FALLBACK TO REQUESTS." });
+      console.error("Redirect logic failed:", err);
+      // Fallback to /request so the user isn't stuck
       router.push("/request");
     }
   };
-
   // ------------------------------------------------
   // HANDLERS
   // ------------------------------------------------
