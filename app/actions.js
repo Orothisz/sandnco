@@ -1,33 +1,24 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
+// Change: Import the dedicated Server Action client
+import { createServerActionClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 
-// Initialize Supabase Client (Standard)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
 export async function submitRequest(formData) {
-  const cookieStore = cookies();
-
-  // 1. CREATE AUTHENTICATED SUPABASE CLIENT
-  // We need this to pass Row Level Security (RLS) policies
-  const supabase = createClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      get(name) {
-        return cookieStore.get(name)?.value;
-      },
-    },
-  });
+  // 1. INITIALIZE SERVER ACTION CLIENT
+  // This automatically handles cookie-based authentication
+  const supabase = createServerActionClient({ cookies });
 
   // 2. VERIFY USER SESSION
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!user) {
+  if (!session) {
     return { success: false, message: "UNAUTHORIZED_ACCESS: PLEASE LOGIN" };
   }
+
+  const user = session.user;
 
   // 3. EXTRACT FORM DATA
   const rawData = {
@@ -75,7 +66,6 @@ export async function submitRequest(formData) {
   const requestID = insertedData.id;
 
   // 5. PREPARE TELEGRAM MESSAGE
-  // HTML formatting for the "Dossier" look
   const tgMessage = `
 🚨 <b>NEW MISSION #${requestID}</b>
 ➖➖➖➖➖➖➖➖➖➖
