@@ -47,30 +47,36 @@ export default function Login() {
   // ------------------------------------------------
   // SMART REDIRECT (FIXED FOR INSTANT LOAD)
   // ------------------------------------------------
+ // ------------------------------------------------
+  // SMART REDIRECT (HARD RESET VERSION)
+  // ------------------------------------------------
   const performSmartRedirect = async (userId) => {
     try {
-      // Ensure we are strictly checking the 'requests' table for this specific user
+      console.log("Initiating Scan for User:", userId);
+
+      // Check if user has any existing requests
       const { count, error } = await supabase
         .from("requests")
-        .select("id", { count: "exact", head: true })
+        .select("id", { count: "exact" })
         .eq("user_id", userId);
 
       if (error) {
-        console.error("Supabase Query Error:", error.message);
+        console.error("Supabase Error:", error.message);
         throw error;
       }
 
-      // Logic: If they have 0 requests, they are a new or inactive user -> /request
-      // Logic: If they have 1+ requests, they are an active agent -> /dashboard
-      const destination = (count && count > 0) ? "/dashboard" : "/request";
+      // Determine Destination
+      const destination = count && count > 0 ? "/dashboard" : "/request";
       
-      console.log(`Redirecting to: ${destination}`); // Debugging log
-      router.push(destination);
+      console.log(`Mission Identified. Navigating to: ${destination}`);
+
+      // HARD REDIRECT: This fixes the "Stuck" issue by bypassing the router cache
+      window.location.assign(destination);
 
     } catch (err) {
-      console.error("Redirect logic failed:", err);
-      // Fallback to /request so the user isn't stuck
-      router.push("/request");
+      console.error("Redirect Critical Failure:", err);
+      // Fallback: If everything fails, force them to the request page
+      window.location.assign("/request");
     }
   };
   // ------------------------------------------------
