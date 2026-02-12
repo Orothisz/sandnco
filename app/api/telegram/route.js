@@ -1,9 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
+// CRITICAL: Use Service Role Key to bypass RLS
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY 
 );
 
 const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -14,7 +15,11 @@ async function sendMessage(chatId, text) {
   await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify({ 
+      chat_id: chatId, 
+      text: text,
+      parse_mode: "HTML" // Allows for bold/code formatting
+    }),
   });
 }
 
@@ -23,9 +28,9 @@ export async function POST(req) {
     const body = await req.json();
     const message = body.message || body.channel_post;
 
-    // 1. Security Check (Ignore messages from strangers)
+    // 1. Security Check
     if (!message || String(message.chat.id) !== ADMIN_CHAT_ID) {
-      return NextResponse.json({ message: "Ignored" });
+      return NextResponse.json({ message: "Unauthorized Source Ignored" });
     }
 
     const text = message.text;
@@ -33,24 +38,24 @@ export async function POST(req) {
       return NextResponse.json({ message: "Not a command" });
     }
 
-    // 2. Parse Command: "/status 15 ACTIVE"
+    // 2. Parse Command: "/status 15 ACTIVE" or "/msg 15 target spotted"
     const parts = text.split(" ");
-    const command = parts[0];
+    const command = parts[0].toLowerCase();
     const requestId = parts[1];
-    const content = parts.slice(2).join(" "); // The rest of the string
+    const content = parts.slice(2).join(" "); 
 
     if (!requestId) {
-        await sendMessage(message.chat.id, "❌ Error: Missing ID. Usage: /status <ID> <VALUE>");
+        await sendMessage(message.chat.id, "❌ <b>ERROR:</b> Missing Mission ID.");
         return NextResponse.json({ message: "Missing ID" });
     }
 
-    // ---------------- COMMAND: /status ----------------
+    // ---------------- COMMAND: /status (Change Mission State) ----------------
     if (command === "/status") {
        const validStatuses = ["PENDING", "ACTIVE", "COMPLETED", "REJECTED"];
        const newStatus = content.toUpperCase();
 
        if (!validStatuses.includes(newStatus)) {
-           await sendMessage(message.chat.id, `❌ Invalid Status. Use: ${validStatuses.join(", ")}`);
+           await sendMessage(message.chat.id, `❌ <b>INVALID STATUS.</b> Use: ${validStatuses.join(", ")}`);
            return NextResponse.json({ error: "Invalid Status" });
        }
 
@@ -60,15 +65,19 @@ export async function POST(req) {
          .eq("id", requestId);
 
        if (error) {
-           await sendMessage(message.chat.id, `❌ DB Error: ${error.message}`);
+           await sendMessage(message.chat.id, `❌ <b>DB ERROR:</b> ${error.message}`);
        } else {
-           await sendMessage(message.chat.id, `✅ Request #${requestId} updated to: ${newStatus}`);
+           // Your requested success reply
+           await sendMessage(message.chat.id, `✅ <b>SYSTEM UPDATE: SUCCESS</b>\nMission #${requestId} status changed to: <code>${newStatus}</code>`);
        }
     }
 
-    // ---------------- COMMAND: /msg (Send Update) ----------------
+    // ---------------- COMMAND: /msg (Send Intel Update) ----------------
     else if (command === "/msg") {
-        if (!content) return NextResponse.json({ error: "No content" });
+        if (!content) {
+            await sendMessage(message.chat.id, "❌ <b>ERROR:</b> Update content is empty.");
+            return NextResponse.json({ error: "No content" });
+        }
 
         const { error } = await supabase
           .from("requests")
@@ -76,9 +85,10 @@ export async function POST(req) {
           .eq("id", requestId);
 
         if (error) {
-            await sendMessage(message.chat.id, `❌ DB Error: ${error.message}`);
+            await sendMessage(message.chat.id, `❌ <b>DB ERROR:</b> ${error.message}`);
         } else {
-            await sendMessage(message.chat.id, `✅ Update sent to User #${requestId}: "${content}"`);
+            // Your requested success reply
+            await sendMessage(message.chat.id, `📂 <b>INTEL ADDED</b>\nUpdate successfully logged for Mission #${requestId}:\n<i>"${content}"</i>`);
         }
     }
 
