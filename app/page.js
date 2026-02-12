@@ -30,7 +30,7 @@ const siteConfig = {
     status: "OPERATIONAL",
   },
   hero: {
-    line1: "MANUFACTURED",
+    line1: "MANFACTURED",
     line2: "COINCIDENCES",
     subhead: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.",
     manifesto: "WE DON'T FIND LOVE. WE FORCE IT. WE DON'T WAIT FOR BREAKUPS. WE ENGINEER THEM.",
