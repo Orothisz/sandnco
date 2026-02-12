@@ -37,6 +37,17 @@ export default function Login() {
   const [otp, setOtp] = useState("");
 
   // ------------------------------------------------
+  // HELPER: PASSWORD STRENGTH CHECK
+  // ------------------------------------------------
+  const checkPasswordStrength = (pwd) => {
+    if (pwd.length < 8) return "WEAK KEY: MINIMUM 8 CHARACTERS REQUIRED.";
+    if (!/[A-Z]/.test(pwd)) return "WEAK KEY: MISSING UPPERCASE LETTER.";
+    if (!/[a-z]/.test(pwd)) return "WEAK KEY: MISSING LOWERCASE LETTER.";
+    if (!/[0-9]/.test(pwd)) return "WEAK KEY: MISSING NUMERIC DIGIT.";
+    return null; // Password is strong
+  };
+
+  // ------------------------------------------------
   // SMART REDIRECT (HOME-FIRST LOGIC)
   // ------------------------------------------------
   const performSmartRedirect = async (userId) => {
@@ -85,6 +96,13 @@ export default function Login() {
     e.preventDefault();
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED." });
     if (username.length < 3) return setMessage({ type: "error", text: "ALIAS TOO SHORT." });
+
+    // Validate Password Strength
+    const passwordError = checkPasswordStrength(password);
+    if (passwordError) {
+        setLoading(false);
+        return setMessage({ type: "error", text: passwordError });
+    }
 
     setLoading(true);
 
@@ -162,6 +180,14 @@ export default function Login() {
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
+    
+    // Validate Password Strength
+    const passwordError = checkPasswordStrength(password);
+    if (passwordError) {
+        setLoading(false);
+        return setMessage({ type: "error", text: passwordError });
+    }
+
     setLoading(true);
     const { data, error } = await supabase.auth.updateUser({ password });
     if (error) {
