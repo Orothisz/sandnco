@@ -14,14 +14,31 @@ export async function middleware(req) {
 
   const path = req.nextUrl.pathname
 
-  // 3. DEFINE RESTRICTED ZONES (The "VIP" Areas)
-  // If user is NOT logged in, and tries to visit these paths...
+  // -------------------------------------------------------------
+  // SECURITY LEVEL 1: GOD MODE (ADMIN PANEL)
+  // -------------------------------------------------------------
+  // If the path is /admin...
+  if (path.startsWith('/admin')) {
+    // Check if the user is NOT the specific admin email
+    if (!session || session.user.email !== 'admin@sandnco.lol') {
+      // STEALTH MODE: Rewrite to 404 so hackers think the page doesn't exist
+      // (Instead of redirecting, which tells them "You are forbidden")
+      return NextResponse.rewrite(new URL('/404', req.url))
+    }
+  }
+
+  // -------------------------------------------------------------
+  // SECURITY LEVEL 2: RESTRICTED ZONES (OPERATIVES ONLY)
+  // -------------------------------------------------------------
+  // If user is NOT logged in, and tries to visit protected areas...
   if (!session && (path.startsWith('/dashboard') || path.startsWith('/request'))) {
     // ...Redirect them to Login immediately.
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  // 4. DEFINE PUBLIC ZONES (Optional: Kick logged-in users out of login page)
+  // -------------------------------------------------------------
+  // SECURITY LEVEL 3: PUBLIC ZONES (NO BACKSIES)
+  // -------------------------------------------------------------
   // If user IS logged in, and tries to visit /login or /signup...
   if (session && (path === '/login' || path === '/signup')) {
     // ...Send them to Dashboard.
@@ -32,7 +49,6 @@ export async function middleware(req) {
 }
 
 // 5. CONFIGURE MATCHER
-// This tells Next.js to run this security check on specific paths
 export const config = {
   matcher: [
     /*
