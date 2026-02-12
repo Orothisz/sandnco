@@ -14,6 +14,21 @@ export async function middleware(req) {
 
   const path = req.nextUrl.pathname
 
+  // -------------------------------------------------------------
+  // NEW: ADMIN SECURITY (GOD MODE)
+  // -------------------------------------------------------------
+  // If user tries to access /admin...
+  if (path.startsWith('/admin')) {
+    // Normalize email (lowercase + trim) to prevent lockout
+    const userEmail = session?.user?.email?.trim().toLowerCase();
+    
+    // Check if user is NOT logged in OR email is NOT the admin
+    if (!session || userEmail !== 'admin@sandnco.lol') {
+      // STEALTH MODE: Rewrite to 404 so hackers think the page doesn't exist
+      return NextResponse.rewrite(new URL('/404', req.url))
+    }
+  }
+
   // 3. DEFINE RESTRICTED ZONES (The "VIP" Areas)
   // If user is NOT logged in, and tries to visit these paths...
   if (!session && (path.startsWith('/dashboard') || path.startsWith('/request'))) {
@@ -41,7 +56,8 @@ export const config = {
      * 2. /_next/ (Next.js internals)
      * 3. /static (Images, fonts, etc.)
      * 4. /favicon.ico, /sitemap.xml (SEO files)
+     * 5. /logo.png (ADDED: Keeps your logo visible!)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|logo.png).*)',
   ],
 }
