@@ -10,9 +10,12 @@ import {
   Skull, 
   Siren, 
   Terminal, 
-  ChevronRight 
+  ChevronRight,
+  LogOut
 } from "lucide-react";
 import Link from "next/link";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useRouter } from "next/navigation";
 
 // ------------------------------------------------------------------
 // CONFIGURATION
@@ -173,12 +176,37 @@ const PanicButton = () => {
 // ------------------------------------------------------------------
 
 export default function Home() {
+  const router = useRouter();
+  const supabase = createClientComponentClient();
   const { scrollYProgress } = useScroll();
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "30%"]);
   
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [agreed, setAgreed] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  // AUTH CHECK
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsLoggedIn(!!session);
+    };
+    checkUser();
+
+    // Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setIsLoggedIn(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  // LOGOUT HANDLER
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsLoggedIn(false);
+    router.refresh();
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -257,12 +285,21 @@ export default function Home() {
             </Link>
             
             {isLoggedIn ? (
-              <Link href="/dashboard">
-                <button className="flex items-center gap-2 bg-green-900/20 border border-green-500/50 text-green-400 px-6 py-2 hover:bg-green-500 hover:text-black transition-all font-bold">
-                  <Terminal className="w-4 h-4" />
-                  DASHBOARD_ACCESS
+              <div className="flex items-center gap-4">
+                <Link href="/dashboard">
+                  <button className="flex items-center gap-2 bg-green-900/20 border border-green-500/50 text-green-400 px-6 py-2 hover:bg-green-500 hover:text-black transition-all font-bold">
+                    <Terminal className="w-4 h-4" />
+                    DASHBOARD
+                  </button>
+                </Link>
+                <button 
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 text-red-500 hover:text-white transition-colors border border-red-500/20 px-4 py-2 rounded hover:bg-red-600 font-bold"
+                >
+                  <LogOut className="w-3 h-3" />
+                  LOGOUT
                 </button>
-              </Link>
+              </div>
             ) : (
               <div className="flex items-center gap-4">
                 <Link href="/login">
