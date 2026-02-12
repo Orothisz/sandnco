@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { useState, useEffect } from "react";
 import { 
   ShieldAlert, 
@@ -28,7 +28,7 @@ const siteConfig = {
   hero: {
     line1: "MANUFACTURED",
     line2: "COINCIDENCES",
-    sub: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.",
+    subhead: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.",
     manifesto: "WE DON'T FIND LOVE. WE FORCE IT. WE DON'T WAIT FOR BREAKUPS. WE ENGINEER THEM.",
   },
   liveFeed: [
@@ -135,24 +135,19 @@ const GlitchText = ({ text }) => (
   </div>
 );
 
-// ------------------------------------------------------------------
-// LOGIC & UTILS
-// ------------------------------------------------------------------
-
 const PanicButton = () => {
   const [safeMode, setSafeMode] = useState(false);
-
   if (safeMode) {
     return (
       <div className="fixed inset-0 z-[9999] bg-white text-black font-serif p-8 overflow-auto">
         <div className="max-w-4xl mx-auto">
           <div className="border-b pb-4 mb-4 flex items-center gap-4">
-             <img src="https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png" className="w-12 h-12" alt="wiki"/>
-             <h1 className="text-3xl font-serif">Cat</h1>
+              <img src="https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png" className="w-12 h-12" alt="wiki"/>
+              <h1 className="text-3xl font-serif">Cat</h1>
           </div>
           <p className="text-sm text-gray-600 mb-4">From Wikipedia, the free encyclopedia</p>
           <div className="float-right border border-gray-300 p-2 mb-4 ml-4 bg-gray-50 w-64 text-xs">
-            <img src="https://placekitten.com/300/200" className="w-full mb-2" alt="cat"/>
+            <img src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=300" className="w-full mb-2" alt="cat"/>
             <p>The domestic cat (Felis catus).</p>
           </div>
           <p className="mb-4">The <b>cat</b> (<i>Felis catus</i>) is a domestic species of small carnivorous mammal. It is the only domesticated species in the family Felidae.</p>
@@ -161,7 +156,6 @@ const PanicButton = () => {
       </div>
     );
   }
-
   return (
     <button
       onClick={() => setSafeMode(true)}
@@ -182,11 +176,7 @@ export default function Home() {
   const { scrollYProgress } = useScroll();
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "30%"]);
   
-  // MOCK AUTH STATE (Replace with real backend check later)
-  // Set this to true to test the "Dashboard" view
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-
-  // Loading State for the "Liability Waiver"
   const [agreed, setAgreed] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -197,7 +187,7 @@ export default function Home() {
           clearInterval(timer);
           return 100;
         }
-        return prev + Math.random() * 8;
+        return prev + Math.random() * 15;
       });
     }, 100);
     return () => clearInterval(timer);
@@ -205,7 +195,7 @@ export default function Home() {
 
   if (!agreed) {
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 text-center">
+      <div className="fixed inset-0 z-[100] bg-[#020205] flex flex-col items-center justify-center p-6 text-center">
         <div className="absolute inset-0 bg-red-900/10 pointer-events-none" />
         <Scanlines />
         <motion.div 
@@ -244,58 +234,54 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#191970] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans">
+    <main className="min-h-screen bg-[#020205] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans">
       <NoiseOverlay />
       <Scanlines />
       <PanicButton />
 
       {/* --- NAVBAR --- */}
-      <nav className="fixed top-0 w-full z-40 px-6 py-4 flex justify-between items-center bg-gradient-to-b from-[#020205] to-transparent backdrop-blur-sm border-b border-white/5">
-         <div className="flex items-center gap-3">
-           {/* LOGO: Ensure logo.png is in /public folder */}
-           <img src="/logo.png" className="w-10 h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
-           <span className="font-black text-xl italic tracking-tighter text-white">
-             {siteConfig.identity.name}<span className="text-red-600">{siteConfig.identity.domain}</span>
-           </span>
-         </div>
+      <nav className="fixed top-0 w-full z-40 px-6 py-4 flex justify-between items-center bg-[#020205]/90 backdrop-blur-md border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" className="w-10 h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
+            <span className="font-black text-xl italic tracking-tighter text-white">
+              {siteConfig.identity.name}<span className="text-red-600">{siteConfig.identity.domain}</span>
+            </span>
+          </div>
 
-         {/* DESKTOP NAV */}
-         <div className="hidden md:flex items-center gap-8 text-[11px] font-mono tracking-widest uppercase">
-           <Link href="#pricing">
-             <span className="text-gray-400 hover:text-white cursor-pointer transition-colors">[Pricing]</span>
-           </Link>
-           <Link href="#legal">
-             <span className="text-gray-400 hover:text-white cursor-pointer transition-colors">[Legal]</span>
-           </Link>
-           
-           {/* CONDITIONAL AUTH BUTTONS */}
-           {isLoggedIn ? (
-             <Link href="/dashboard">
-               <button className="flex items-center gap-2 bg-green-900/20 border border-green-500/50 text-green-400 px-6 py-2 hover:bg-green-500 hover:text-black transition-all font-bold">
-                 <Terminal className="w-4 h-4" />
-                 DASHBOARD_ACCESS
-               </button>
-             </Link>
-           ) : (
-             <div className="flex items-center gap-4">
-               <Link href="/login">
-                 <span className="text-gray-400 hover:text-red-500 cursor-pointer transition-colors">Log In</span>
-               </Link>
-               <Link href="/signup">
-                 <button className="bg-white text-black px-6 py-2 font-bold hover:bg-red-600 hover:text-white transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-                   SIGN UP
-                 </button>
-               </Link>
-             </div>
-           )}
-         </div>
+          <div className="hidden md:flex items-center gap-8 text-[11px] font-mono tracking-widest uppercase">
+            <Link href="#pricing">
+              <span className="text-gray-400 hover:text-white cursor-pointer transition-colors">[Pricing]</span>
+            </Link>
+            <Link href="/legal">
+              <span className="text-gray-400 hover:text-white cursor-pointer transition-colors">[Legal]</span>
+            </Link>
+            
+            {isLoggedIn ? (
+              <Link href="/dashboard">
+                <button className="flex items-center gap-2 bg-green-900/20 border border-green-500/50 text-green-400 px-6 py-2 hover:bg-green-500 hover:text-black transition-all font-bold">
+                  <Terminal className="w-4 h-4" />
+                  DASHBOARD_ACCESS
+                </button>
+              </Link>
+            ) : (
+              <div className="flex items-center gap-4">
+                <Link href="/login">
+                  <span className="text-gray-400 hover:text-red-500 cursor-pointer transition-colors">Log In</span>
+                </Link>
+                <Link href="/login">
+                  <button className="bg-white text-black px-6 py-2 font-bold hover:bg-red-600 hover:text-white transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                    SIGN UP
+                  </button>
+                </Link>
+              </div>
+            )}
+          </div>
       </nav>
 
       {/* --- HERO SECTION --- */}
       <section className="relative min-h-screen flex flex-col justify-center items-center pt-20 px-4 overflow-hidden">
         <motion.div style={{ y }} className="relative z-10 text-center max-w-7xl">
           
-          {/* FREE TIER ALERT */}
           <div className="inline-flex items-center gap-2 px-4 py-1 border border-yellow-500/30 bg-yellow-900/20 rounded-full mb-8 backdrop-blur-md animate-pulse">
              <Siren className="w-4 h-4 text-yellow-500" />
              <span className="text-[10px] font-mono tracking-widest text-yellow-300 uppercase">
@@ -307,7 +293,7 @@ export default function Home() {
              <span className="block text-transparent bg-clip-text bg-gradient-to-b from-white via-gray-200 to-gray-600">
                {siteConfig.hero.line1}
              </span>
-             <span className="block text-transparent bg-clip-text bg-gradient-to-b from-gray-400 via-gray-600 to-[#191970] opacity-80">
+             <span className="block text-transparent bg-clip-text bg-gradient-to-b from-gray-400 via-gray-600 to-gray-900 opacity-80">
                <GlitchText text={siteConfig.hero.line2} />
              </span>
           </h1>
@@ -317,9 +303,9 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
-            <Link href={isLoggedIn ? "/dashboard" : "/signup"}>
+            <Link href="/request">
                 <button className="px-12 py-5 bg-white text-black font-black text-xl uppercase tracking-tighter hover:bg-red-600 hover:text-white transition-all shadow-[0_0_40px_rgba(255,255,255,0.2)]">
-                {isLoggedIn ? "ENTER CONSOLE" : "INITIATE PROTOCOL (FREE)"}
+                INITIATE PROTOCOL (FREE)
                 </button>
             </Link>
             <p className="text-xs font-mono text-gray-500 max-w-xs text-left border-l-2 border-gray-700 pl-4">
@@ -328,8 +314,7 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* Background Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-red-600/5 rounded-full blur-[120px] pointer-events-none" />
       </section>
 
       {/* --- POLICE TAPE --- */}
@@ -379,7 +364,6 @@ export default function Home() {
               >
                 <div className={`absolute inset-0 border-2 border-transparent ${service.border} transition-all duration-500 pointer-events-none`} />
                 
-                {/* Card Content */}
                 <div>
                    <div className={`mb-6 p-3 bg-white/5 w-fit rounded ${service.color}`}>
                      {service.icon}
@@ -403,7 +387,6 @@ export default function Home() {
                    </ul>
                 </div>
 
-                {/* Card Footer / Price */}
                 <div>
                   <div className="flex justify-between items-end border-t border-white/5 pt-6 mt-8">
                      <div>
@@ -414,7 +397,7 @@ export default function Home() {
                           {service.price}
                         </span>
                      </div>
-                     <Link href={isLoggedIn ? "/request" : "/signup"}>
+                     <Link href="/request">
                         <button className="text-xs font-black uppercase bg-white text-black px-4 py-2 hover:bg-gray-300 transition-colors">
                         Select
                         </button>
@@ -427,7 +410,7 @@ export default function Home() {
       </section>
 
       {/* --- FOOTER / LEGAL --- */}
-      <footer id="legal" className="bg-black py-20 px-6 border-t border-white/10 relative z-10">
+      <footer className="bg-black py-20 px-6 border-t border-white/10 relative z-10">
         <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-12">
            <div>
              <h4 className="text-2xl font-black italic text-white mb-4">SANDNCO.LOL</h4>
@@ -440,9 +423,9 @@ export default function Home() {
            
            <div className="text-right">
              <div className="flex justify-end gap-8 text-xs font-bold uppercase tracking-widest text-white/40 mb-8">
-               <a href="#" className="hover:text-red-500 transition">Terms of Service</a>
-               <a href="#" className="hover:text-red-500 transition">Privacy Policy</a>
-               <a href="#" className="hover:text-red-500 transition">Instagram</a>
+               <Link href="/legal" className="hover:text-red-500 transition">Terms of Service</Link>
+               <Link href="/legal" className="hover:text-red-500 transition">Privacy Policy</Link>
+               <a href="https://instagram.com" className="hover:text-red-500 transition">Instagram</a>
              </div>
              <p className="text-[10px] text-gray-700 max-w-sm ml-auto">
                DISCLAIMER: We are an entertainment service. Any resemblance to real-life stalking, emotional manipulation, or actual black-ops is purely coincidental. Please do not sue us. We have no money.
