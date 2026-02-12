@@ -3,29 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
-  ShieldAlert, 
-  Activity, 
-  Users, 
-  DollarSign, 
-  Terminal, 
-  Search, 
-  Check, 
-  X, 
-  Eye, 
-  Lock, 
-  RefreshCw,
-  Send,
-  FileText,
-  AlertTriangle,
-  Ban,
-  Smartphone,
-  Mail
+  ShieldAlert, Activity, Users, DollarSign, Terminal, Search, Check, X, Eye, Lock, 
+  RefreshCw, Send, FileText, AlertTriangle, Ban, Smartphone, Mail, MessageSquare
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-// ------------------------------------------------------------------
-// COMPONENT: ADMIN DASHBOARD (GOD MODE)
-// ------------------------------------------------------------------
 
 export default function AdminDashboard() {
   const supabase = createClientComponentClient();
@@ -33,14 +14,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, active: 0, revenue: 0, pending: 0 });
   const [filter, setFilter] = useState("ALL");
-  const [selectedRequest, setSelectedRequest] = useState(null); // For the Dossier Panel
-  const [adminLog, setAdminLog] = useState([]); // Local log of admin actions
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [adminLog, setAdminLog] = useState([]); 
+  const [commsMessage, setCommsMessage] = useState("");
+  const [sendingComms, setSendingComms] = useState(false);
 
   // 1. DATA INGESTION
   const fetchIntel = async () => {
-    setLoading(true);
-    // Fetch requests joined with profiles to get usernames/phones if needed
-    // (Assuming simple join or just fetching requests for now)
+    // Don't show loading spinner on background refreshes
     const { data, error } = await supabase
       .from("requests")
       .select("*")
@@ -49,23 +30,37 @@ export default function AdminDashboard() {
     if (!error) {
       setRequests(data);
       calculateStats(data);
+      // If a request is currently selected, update its local state too so the panel updates live
+      if (selectedRequest) {
+        const updatedSelected = data.find(r => r.id === selectedRequest.id);
+        if (updatedSelected) setSelectedRequest(updatedSelected);
+      }
+    } else {
+      console.error("Intel Fetch Failed:", error);
     }
     setLoading(false);
   };
 
-  // 2. REALTIME SURVEILLANCE
+  // 2. REALTIME SURVEILLANCE (THE FIX)
   useEffect(() => {
     fetchIntel();
+
     const channel = supabase
       .channel('god-mode-feed')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, (payload) => {
-        addLog(`SIGNAL DETECTED: DB UPDATE ON ID #${payload.new.id || payload.old.id}`);
-        fetchIntel();
-      })
+      .on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'requests' }, 
+        (payload) => {
+          addLog(`SIGNAL DETECTED: UPDATE ON ID #${payload.new.id || payload.old.id}`);
+          fetchIntel(); // Force full refresh on any change
+        }
+      )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, []);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]); // Added supabase dependency
 
   // 3. LOGIC KERNEL
   const calculateStats = (data) => {
@@ -73,10 +68,12 @@ export default function AdminDashboard() {
     const pending = data.filter(r => r.status === 'PENDING').length;
     const revenue = data.reduce((acc, curr) => {
       let price = 0;
-      if (curr.service_type?.includes('breakup')) price = 999;
-      if (curr.service_type?.includes('patchup')) price = 1499;
-      if (curr.service_type?.includes('matchup')) price = 1999;
-      if (curr.service_type?.includes('vip')) price = 2700;
+      // Robust checking for service types
+      const type = curr.service_type?.toLowerCase() || '';
+      if (type.includes('breakup')) price = 999;
+      if (type.includes('patchup')) price = 1499;
+      if (type.includes('matchup')) price = 1999;
+      if (type.includes('vip')) price = 2700;
       return acc + price;
     }, 0);
 
@@ -90,23 +87,43 @@ export default function AdminDashboard() {
 
   // 4. COMMAND EXECUTION
   const updateStatus = async (id, newStatus, e) => {
-    if (e) e.stopPropagation(); // Prevent opening the drawer
-    await supabase.from("requests").update({ status: newStatus }).eq("id", id);
-    addLog(`COMMAND EXECUTED: ID #${id} STATUS -> ${newStatus}`);
+    if (e) e.stopPropagation();
+    
+    // Optimistic UI update (make it feel instant)
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
+    if (selectedRequest?.id === id) setSelectedRequest(prev => ({ ...prev, status: newStatus }));
+
+    const { error } = await supabase.from("requests").update({ status: newStatus }).eq("id", id);
+    
+    if (error) {
+        addLog(`ERROR: COMMAND FAILED ON ID #${id}`);
+        fetchIntel(); // Revert on failure
+    } else {
+        addLog(`COMMAND EXECUTED: ID #${id} STATUS -> ${newStatus}`);
+    }
   };
 
-  const sendIntelUpdate = async (id, message) => {
-    // Appends to the log history in 'additional_details' or updates 'latest_update'
-    // Here we update 'latest_update' for the "Live Intel" box on user dashboard
+  // 5. DIRECT COMMS UPLINK (THE FIX)
+  const sendIntelUpdate = async () => {
+    if (!commsMessage.trim() || !selectedRequest) return;
+    setSendingComms(true);
+
+    // Update the 'latest_update' column which users see on their dashboard
     const { error } = await supabase
         .from("requests")
-        .update({ latest_update: message })
-        .eq("id", id);
+        .update({ latest_update: commsMessage })
+        .eq("id", selectedRequest.id);
     
-    if (!error) addLog(`INTEL SENT TO AGENT #${id}: "${message}"`);
+    if (!error) {
+        addLog(`INTEL TRANSMITTED TO AGENT #${selectedRequest.id}`);
+        setCommsMessage(""); // Clear box
+        // We don't need to manually update selectedRequest because the Realtime subscription will catch it
+    } else {
+        addLog(`TRANSMISSION FAILED: ${error.message}`);
+    }
+    setSendingComms(false);
   };
 
-  // 5. FILTERING
   const filteredRequests = requests.filter(r => {
     if (filter === "ALL") return true;
     return r.status === filter;
@@ -127,15 +144,11 @@ export default function AdminDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex flex-col text-right">
-             <span className="text-[10px] text-gray-600">SERVER TIME</span>
-             <span className="text-xs font-bold text-white">{new Date().toLocaleTimeString()}</span>
-          </div>
-          <button onClick={fetchIntel} className="p-3 border border-green-900/30 hover:bg-green-900/20 rounded transition-all active:scale-95">
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          <button onClick={fetchIntel} className="p-3 border border-green-900/30 hover:bg-green-900/20 rounded transition-all active:scale-95 group">
+            <RefreshCw className={`w-5 h-5 group-hover:rotate-180 transition-transform ${loading ? 'animate-spin' : ''}`} />
           </button>
           <div className="bg-red-900/10 text-red-500 px-4 py-2 rounded text-xs font-bold border border-red-500/30 animate-pulse flex items-center gap-2">
-            <div className="w-2 h-2 bg-red-500 rounded-full" /> LIVE
+            <div className="w-2 h-2 bg-red-500 rounded-full" /> LIVE FEED
           </div>
         </div>
       </header>
@@ -149,7 +162,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* MAIN CONSOLE AREA */}
-      <div className="flex-1 flex gap-6 overflow-hidden relative">
+      <div className="flex-1 flex gap-6 overflow-hidden relative min-h-[500px]">
         
         {/* LEFT PANEL: TABLE */}
         <div className={`flex-1 bg-[#050505] border border-green-900/30 rounded-lg overflow-hidden flex flex-col transition-all duration-300 ${selectedRequest ? 'w-2/3 hidden md:flex' : 'w-full'}`}>
@@ -176,7 +189,7 @@ export default function AdminDashboard() {
               <input 
                 type="text" 
                 placeholder="SEARCH ID..." 
-                className="bg-black border border-green-900/30 pl-10 pr-4 py-1.5 text-xs text-green-500 focus:outline-none focus:border-green-500 w-40 md:w-64 rounded placeholder:text-gray-800"
+                className="bg-black border border-green-900/30 pl-10 pr-4 py-1.5 text-xs text-green-500 focus:outline-none focus:border-green-500 w-32 md:w-64 rounded placeholder:text-gray-800"
               />
             </div>
           </div>
@@ -285,7 +298,48 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 2. TARGET INTEL */}
+                {/* 2. LIVE COMMS (MOVED UP FOR PRIORITY) */}
+                <div>
+                   <label className="text-[10px] text-green-500 uppercase font-bold tracking-widest block mb-2 border-b border-green-900/30 pb-1 flex items-center gap-2">
+                      <MessageSquare className="w-3 h-3" /> Direct Comms Uplink
+                   </label>
+                   
+                   {/* Current Message Display */}
+                   {selectedRequest.latest_update && (
+                     <div className="mb-4 bg-green-900/10 border border-green-500/20 p-3 rounded text-xs text-green-400 font-mono">
+                        <span className="block text-[10px] text-green-600 mb-1 opacity-70">LATEST TRANSMISSION:</span>
+                        "{selectedRequest.latest_update}"
+                     </div>
+                   )}
+
+                   <div className="bg-black border border-green-900/50 rounded p-3">
+                      <textarea 
+                        value={commsMessage}
+                        onChange={(e) => setCommsMessage(e.target.value)}
+                        className="w-full bg-transparent text-xs text-green-400 font-mono focus:outline-none resize-none placeholder:text-green-900"
+                        rows="3"
+                        placeholder="TYPE INTEL UPDATE FOR AGENT..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            sendIntelUpdate();
+                          }
+                        }}
+                      ></textarea>
+                      <div className="flex justify-between items-center mt-2 border-t border-green-900/30 pt-2">
+                        <span className="text-[10px] text-green-700 animate-pulse">● SECURE LINE OPEN</span>
+                        <button 
+                          onClick={sendIntelUpdate}
+                          disabled={sendingComms || !commsMessage.trim()}
+                          className="bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-black text-xs font-bold px-4 py-1 rounded flex items-center gap-2"
+                        >
+                          {sendingComms ? 'SENDING...' : 'TRANSMIT'} <Send className="w-3 h-3" />
+                        </button>
+                      </div>
+                   </div>
+                </div>
+
+                {/* 3. TARGET INTEL */}
                 <div>
                    <label className="text-[10px] text-green-500 uppercase font-bold tracking-widest block mb-2 border-b border-green-900/30 pb-1">Target Intelligence</label>
                    <div className="space-y-4">
@@ -295,14 +349,14 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <span className="text-xs text-gray-500 block">BRIEFING NOTES</span>
-                        <p className="text-sm text-gray-300 font-mono bg-gray-900/50 p-3 rounded border border-gray-800 leading-relaxed">
+                        <p className="text-sm text-gray-300 font-mono bg-gray-900/50 p-3 rounded border border-gray-800 leading-relaxed break-words">
                           "{selectedRequest.additional_details || "No additional intelligence provided."}"
                         </p>
                       </div>
                    </div>
                 </div>
 
-                {/* 3. OPERATIVE DATA */}
+                {/* 4. OPERATIVE DATA */}
                 <div>
                    <label className="text-[10px] text-green-500 uppercase font-bold tracking-widest block mb-2 border-b border-green-900/30 pb-1">Operative Details</label>
                    <div className="grid grid-cols-1 gap-3">
@@ -318,37 +372,6 @@ export default function AdminDashboard() {
                         <Ban className="w-3 h-3" /> DISAVOW AGENT (BAN)
                       </button>
                    </div>
-                </div>
-
-                {/* 4. LIVE COMMS */}
-                <div>
-                   <label className="text-[10px] text-green-500 uppercase font-bold tracking-widest block mb-2 border-b border-green-900/30 pb-1">Direct Comms Uplink</label>
-                   <div className="bg-black border border-green-900/50 rounded p-3">
-                      <textarea 
-                        id="intel-box"
-                        className="w-full bg-transparent text-xs text-green-400 font-mono focus:outline-none resize-none placeholder:text-green-900"
-                        rows="3"
-                        placeholder="TYPE INTEL UPDATE FOR AGENT..."
-                      ></textarea>
-                      <div className="flex justify-between items-center mt-2 border-t border-green-900/30 pt-2">
-                        <span className="text-[10px] text-green-700 animate-pulse">● SECURE LINE OPEN</span>
-                        <button 
-                          onClick={() => {
-                            const msg = document.getElementById('intel-box').value;
-                            if(msg) {
-                              sendIntelUpdate(selectedRequest.id, msg);
-                              document.getElementById('intel-box').value = "";
-                            }
-                          }}
-                          className="bg-green-600 hover:bg-green-500 text-black text-xs font-bold px-4 py-1 rounded flex items-center gap-2"
-                        >
-                          TRANSMIT <Send className="w-3 h-3" />
-                        </button>
-                      </div>
-                   </div>
-                   <p className="text-[10px] text-gray-600 mt-2 italic">
-                     * This message will appear instantly on the agent's dashboard.
-                   </p>
                 </div>
 
               </div>
