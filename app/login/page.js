@@ -1,29 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Turnstile from "react-turnstile";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
-  AlertTriangle, 
-  Lock, 
-  Loader, 
-  CheckCircle, 
-  ChevronLeft, 
-  Key, 
-  Mail, 
-  ShieldCheck, 
-  User, 
-  Phone,
-  Eye
+  AlertTriangle, Lock, Loader, CheckCircle, ChevronLeft, Key, Mail, ShieldCheck, User, Phone, Eye
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Login() {
+// WRAPPER COMPONENT (Required for useSearchParams)
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#050510] flex items-center justify-center text-green-500 font-mono text-xs animate-pulse">LOADING SECURE SHELL...</div>}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClientComponentClient();
   
+  // DETECT REDIRECT TARGET (Default to Home '/' if not specified)
+  const redirectTarget = searchParams.get('next') || '/';
+
   const [mode, setMode] = useState("login"); 
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState(null);
@@ -44,32 +47,14 @@ export default function Login() {
     if (!/[A-Z]/.test(pwd)) return "WEAK KEY: MISSING UPPERCASE LETTER.";
     if (!/[a-z]/.test(pwd)) return "WEAK KEY: MISSING LOWERCASE LETTER.";
     if (!/[0-9]/.test(pwd)) return "WEAK KEY: MISSING NUMERIC DIGIT.";
-    return null; // Password is strong
+    return null; 
   };
 
   // ------------------------------------------------
-  // SMART REDIRECT (HOME-FIRST LOGIC)
+  // SMART REDIRECT HANDLER
   // ------------------------------------------------
-  const performSmartRedirect = async (userId) => {
-    try {
-      // Check for existing requests to identify returning agents
-      const { count, error } = await supabase
-        .from("requests")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId);
-
-      if (error) throw error;
-
-      // Logic: New users (count 0) go to /request. Returning users go to Home (/) to fix loops
-      const destination = (count && count > 0) ? "/" : "/request";
-      
-      // Hard redirect to ensure Middleware processes the session cookie
-      window.location.href = destination;
-
-    } catch (err) {
-      console.error("Redirect logic failed:", err);
-      window.location.href = "/";
-    }
+  const executeRedirect = () => {
+     window.location.href = redirectTarget;
   };
 
   // ------------------------------------------------
@@ -81,14 +66,14 @@ export default function Login() {
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED. VERIFY CAPTCHA." });
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     
     if (error) {
       setMessage({ type: "error", text: error.message.toUpperCase() });
       setLoading(false);
     } else {
       setMessage({ type: "success", text: "ACCESS GRANTED. SYNCING SESSION..." });
-      await performSmartRedirect(data.user.id);
+      executeRedirect();
     }
   };
 
@@ -97,7 +82,6 @@ export default function Login() {
     if (!turnstileToken) return setMessage({ type: "error", text: "BOT DETECTED." });
     if (username.length < 3) return setMessage({ type: "error", text: "ALIAS TOO SHORT." });
 
-    // Validate Password Strength
     const passwordError = checkPasswordStrength(password);
     if (passwordError) {
         setLoading(false);
@@ -118,7 +102,7 @@ export default function Login() {
     }
 
     const { error } = await supabase.auth.signUp({
-      email,
+      email: email.trim(),
       password,
       options: { 
         data: { username, phone_number: phone },
@@ -139,21 +123,37 @@ export default function Login() {
   const handleVerifySignup = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { data, error } = await supabase.auth.verifyOtp({ email, token: otp, type: "signup" });
+    
+    // FIX: Remove accidental spaces from copy-pasting
+    const cleanOtp = otp.trim();
+    const cleanEmail = email.trim();
+
+    if (cleanOtp.length !== 8) {
+        setMessage({ type: "error", text: "INVALID FORMAT. EXACTLY 8 DIGITS REQUIRED." });
+        setLoading(false);
+        return;
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({ 
+        email: cleanEmail, 
+        token: cleanOtp, 
+        type: "signup" 
+    });
 
     if (error) {
-      setMessage({ type: "error", text: "INVALID 8-DIGIT CODE." });
+      console.error("OTP Error:", error.message);
+      setMessage({ type: "error", text: "INVALID 8-DIGIT CODE OR EXPIRED TOKEN." });
       setLoading(false);
     } else {
       setMessage({ type: "success", text: "IDENTITY VERIFIED. REDIRECTING..." });
-      await performSmartRedirect(data.session.user.id);
+      executeRedirect();
     }
   };
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
     if (error) {
       setMessage({ type: "error", text: error.message.toUpperCase() });
       setLoading(false);
@@ -167,7 +167,16 @@ export default function Login() {
   const handleVerifyRecovery = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: "recovery" });
+    
+    const cleanOtp = otp.trim();
+    const cleanEmail = email.trim();
+
+    const { error } = await supabase.auth.verifyOtp({ 
+        email: cleanEmail, 
+        token: cleanOtp, 
+        type: "recovery" 
+    });
+    
     if (error) {
       setMessage({ type: "error", text: "INVALID CODE." });
       setLoading(false);
@@ -181,7 +190,6 @@ export default function Login() {
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     
-    // Validate Password Strength
     const passwordError = checkPasswordStrength(password);
     if (passwordError) {
         setLoading(false);
@@ -195,7 +203,7 @@ export default function Login() {
       setLoading(false);
     } else {
       setMessage({ type: "success", text: "PASSWORD RESET. ACCESSING TERMINAL..." });
-      await performSmartRedirect(data.user.id);
+      executeRedirect();
     }
   };
 
