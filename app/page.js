@@ -11,7 +11,9 @@ import {
   Siren, 
   Terminal, 
   ChevronRight,
-  LogOut
+  LogOut,
+  Flame,
+  Crosshair
 } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -30,7 +32,7 @@ const siteConfig = {
     status: "OPERATIONAL",
   },
   hero: {
-    line1: "MANFACTURED",
+    line1: "MANUFACTURED",
     line2: "COINCIDENCES",
     subhead: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.",
     manifesto: "WE DON'T FIND LOVE. WE FORCE IT. WE DON'T WAIT FOR BREAKUPS. WE ENGINEER THEM.",
@@ -263,7 +265,6 @@ export default function Home() {
 
   return (
     <>
-      {/* FAVICON FIX: Injected directly for the home page */}
       <Head>
         <title>SANDNCO.LOL | Black-Ops Romance</title>
         <link rel="icon" href="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=32" />
@@ -275,7 +276,6 @@ export default function Home() {
         <PanicButton />
 
         {/* --- NAVBAR --- */}
-        {/* Changed: Adjusted padding and flex-wrap to ensure visibility on mobile */}
         <nav className="fixed top-0 w-full z-40 px-4 md:px-6 py-4 flex flex-wrap justify-between items-center bg-[#020205]/90 backdrop-blur-md border-b border-white/5">
             <div className="flex items-center gap-2 md:gap-3">
               <img src="/logo.png" className="w-8 h-8 md:w-10 md:h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
@@ -284,10 +284,11 @@ export default function Home() {
               </span>
             </div>
 
-            {/* Mobile-Friendly Navigation Links & Auth */}
             <div className="flex items-center gap-3 md:gap-8 text-[10px] md:text-[11px] font-mono tracking-widest uppercase">
-              {/* Desktop-only secondary links to keep mobile clean */}
-              <div className="hidden sm:flex gap-4">
+              <div className="hidden sm:flex gap-4 items-center">
+                <Link href="/minder">
+                  <span className="text-pink-500 hover:text-white font-black cursor-pointer transition-colors border border-pink-500/30 bg-pink-900/20 px-2 py-0.5 rounded animate-pulse">[MINDER]</span>
+                </Link>
                 <Link href="#pricing">
                   <span className="text-gray-400 hover:text-white cursor-pointer transition-colors">[Pricing]</span>
                 </Link>
@@ -339,7 +340,6 @@ export default function Home() {
                </span>
             </div>
 
-            {/* MANUFACTURED COINCIDENCES TEXT FIX */}
             <h1 className="text-[10vw] md:text-[12vw] leading-[0.8] font-black tracking-tighter mb-6 relative select-none break-words w-full">
                <span className="block text-transparent bg-clip-text bg-gradient-to-b from-white via-gray-200 to-gray-600">
                  {siteConfig.hero.line1}
@@ -354,7 +354,7 @@ export default function Home() {
             </p>
 
             <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
-              <Link href="/request">
+              <Link href="/login?next=/request">
                   <button className="px-12 py-5 bg-white text-black font-black text-xl uppercase tracking-tighter hover:bg-red-600 hover:text-white transition-all shadow-[0_0_40px_rgba(255,255,255,0.2)]">
                   INITIATE PROTOCOL (FREE)
                   </button>
@@ -375,7 +375,7 @@ export default function Home() {
         </div>
 
         {/* --- LIVE KILL LOG --- */}
-        <div className="w-full bg-black border-y border-white/10 py-3 mb-24 overflow-hidden relative z-20">
+        <div className="w-full bg-black border-y border-white/10 py-3 overflow-hidden relative z-20">
           <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-black to-transparent z-10" />
           <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-black to-transparent z-10" />
           <motion.div 
@@ -391,6 +391,73 @@ export default function Home() {
             ))}
           </motion.div>
         </div>
+
+        {/* --- DYNAMIC MINDER ADVERTISEMENT --- */}
+        <section className="px-6 md:px-20 py-24 max-w-[1800px] mx-auto relative z-20">
+           <motion.div
+             initial={{ opacity: 0, y: 50 }}
+             whileInView={{ opacity: 1, y: 0 }}
+             viewport={{ once: true }}
+             className="bg-[#0a0a0f] border border-pink-500/30 p-8 md:p-12 rounded-2xl relative overflow-hidden group"
+           >
+             {/* Neon Pink Background Glow */}
+             <div className="absolute top-0 right-0 w-96 h-96 bg-pink-600/10 blur-[120px] pointer-events-none" />
+
+             <div className="flex flex-col md:flex-row items-center justify-between gap-12 relative z-10">
+               
+               {/* Left Content */}
+               <div className="flex-1">
+                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-pink-500/10 border border-pink-500/30 text-pink-500 text-[10px] font-bold tracking-widest uppercase mb-4 rounded-full">
+                   <Flame className="w-3 h-3 animate-pulse" /> NEW PROTOCOL ACTIVE
+                 </div>
+                 
+                 <h2 className="text-4xl md:text-7xl font-black uppercase text-white mb-2 italic tracking-tighter drop-shadow-[0_0_15px_rgba(219,39,119,0.5)]">
+                   MINDER<span className="text-pink-600">.LOL</span>
+                 </h2>
+                 
+                 <div className="inline-block bg-pink-900/40 border-l-4 border-pink-500 p-3 mb-6">
+                    <p className="text-xs md:text-sm font-mono text-pink-300 font-bold uppercase tracking-widest">
+                      "Couldn't add the 'T' cuz we aren't rich enough and can't afford lawsuits n shit like that."
+                    </p>
+                 </div>
+
+                 <p className="text-sm text-gray-400 font-mono leading-relaxed max-w-xl mb-8 border-b border-white/5 pb-8">
+                   Welcome to the Black-Ops Meat Market. Browse targets. Log in to decrypt their exact Instagram coordinates. See someone you want? Don't just swipe—hit <strong className="text-white">FORCE MATCH</strong> and let our operatives engineer your serendipity.
+                 </p>
+                 
+                 <Link href="/minder">
+                   <button className="bg-pink-600 text-white font-black uppercase px-8 py-4 tracking-widest hover:bg-pink-500 transition-all shadow-[0_0_20px_rgba(219,39,119,0.4)] flex items-center gap-3 hover:scale-105 active:scale-95 group/btn rounded">
+                     <Crosshair className="w-5 h-5 group-hover/btn:animate-spin" /> ENTER THE GRID
+                   </button>
+                 </Link>
+               </div>
+
+               {/* Right Visual Hologram */}
+               <div className="hidden md:flex w-72 h-96 bg-[#050505] border-2 border-pink-900/50 rounded-2xl relative overflow-hidden transform rotate-6 group-hover:rotate-12 transition-transform duration-700 shadow-[0_0_50px_rgba(219,39,119,0.15)] items-center justify-center flex-col gap-4">
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-pink-500/10 to-transparent h-[200%] animate-[scan_3s_ease-in-out_infinite] pointer-events-none" />
+                  
+                  {/* Fake UI Elements */}
+                  <div className="absolute top-4 left-4 flex gap-1">
+                    <div className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" />
+                    <div className="text-[8px] font-mono text-pink-500 uppercase tracking-widest">LIVE FEED</div>
+                  </div>
+
+                  <Crosshair className="w-20 h-20 text-pink-500 opacity-20" />
+                  <div className="text-center z-10">
+                    <div className="text-pink-500 font-black text-4xl tracking-tighter border-4 border-pink-500 px-6 py-2 rotate-[-15deg] backdrop-blur-sm bg-black/60 shadow-xl">
+                      SMASH
+                    </div>
+                  </div>
+
+                  <div className="absolute bottom-6 w-full px-6">
+                    <div className="h-4 w-32 bg-gray-800 rounded mb-2" />
+                    <div className="h-2 w-20 bg-pink-900/50 rounded" />
+                  </div>
+               </div>
+
+             </div>
+           </motion.div>
+        </section>
 
         {/* --- SERVICES / PRICING --- */}
         <section id="pricing" className="px-6 md:px-20 pb-40 max-w-[1800px] mx-auto">
@@ -448,7 +515,7 @@ export default function Home() {
                             {service.price}
                           </span>
                        </div>
-                       <Link href="/request">
+                       <Link href="/login?next=/request">
                           <button className="text-xs font-black uppercase bg-white text-black px-4 py-2 hover:bg-gray-300 transition-colors">
                           Select
                           </button>
@@ -485,6 +552,14 @@ export default function Home() {
           </div>
         </footer>
       </main>
+
+      <style jsx>{`
+        @keyframes scan {
+          0% { transform: translateY(-100%); }
+          50% { transform: translateY(50%); }
+          100% { transform: translateY(-100%); }
+        }
+      `}</style>
     </>
   );
 }
