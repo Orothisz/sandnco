@@ -9,7 +9,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// ------------------------------------------------------------------
+// ------------------------------------------------------------------               
 // MAIN HUB CONTROLLER
 // ------------------------------------------------------------------
 export default function MinderHub() {
@@ -24,41 +24,63 @@ export default function MinderHub() {
   const [pageOffset, setPageOffset] = useState(0);
   const [fetchingMore, setFetchingMore] = useState(false);
 
-  // 1. SYSTEM INITIALIZATION & PAGINATION LOGIC
+  // 1. BULLETPROOF SYSTEM INITIALIZATION & PAGINATION LOGIC
   const fetchTargets = useCallback(async (currentOffset = 0, currentSession = session) => {
     setFetchingMore(true);
     const limit = 10;
     
-    let query = supabase
-      .from('minder_targets')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .range(currentOffset, currentOffset + limit - 1);
-    
-    if (currentSession) {
-      const { data: swiped } = await supabase
-        .from('minder_swipes')
-        .select('target_id')
-        .eq('swiper_id', currentSession.user.id);
-        
-      const swipedIds = swiped?.map(s => s.target_id) || [];
-      if (swipedIds.length > 0) {
-        query = query.not('id', 'in', `(${swipedIds.join(',')})`).neq('user_id', currentSession.user.id);
-      } else {
+    try {
+      // Build the base query
+      let query = supabase
+        .from('minder_targets')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(currentOffset, currentOffset + limit - 1);
+      
+      // Apply filters if user is logged in
+      if (currentSession?.user?.id) {
         query = query.neq('user_id', currentSession.user.id);
-      }
-    }
 
-    const { data, error } = await query;
-    if (error) console.error("🚨 SUPABASE FETCH ERROR:", error.message);
-    
-    if (data && data.length > 0) {
-      setTargets(prev => [...data.reverse(), ...prev]);
-      setPageOffset(currentOffset + limit);
+        const { data: swiped, error: swipeError } = await supabase
+          .from('minder_swipes')
+          .select('target_id')
+          .eq('swiper_id', currentSession.user.id);
+          
+        if (swipeError) console.error("SWIPE FETCH ERROR:", swipeError.message);
+
+        const swipedIds = swiped?.map(s => s.target_id) || [];
+        
+        if (swipedIds.length > 0) {
+          // FIX: Pass the array directly to avoid PostgREST string formatting crashes
+          query = query.not('id', 'in', `(${swipedIds.join(',')})`);
+        }
+      }
+
+      // Execute the query
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error("🚨 SUPABASE FETCH ERROR:", error.message, error.details);
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        setTargets(prev => {
+          // FIX: Prevent duplicates from breaking the React render cycle
+          const existingIds = new Set(prev.map(t => t.id));
+          const newTargets = data.filter(t => !existingIds.has(t.id));
+          return [...newTargets.reverse(), ...prev];
+        });
+        setPageOffset(currentOffset + limit);
+      } else {
+        console.log("Database queried successfully, but 0 targets were returned.");
+      }
+    } catch (err) {
+      console.error("Critical failure during fetchTargets:", err);
+    } finally {
+      setLoading(false);
+      setFetchingMore(false);
     }
-    
-    setLoading(false);
-    setFetchingMore(false);
   }, [session, supabase]);
 
   useEffect(() => {
@@ -158,7 +180,7 @@ export default function MinderHub() {
         
         <div className="hidden md:flex flex-col items-end gap-2 text-right pointer-events-auto">
            <h1 className="text-3xl font-black italic tracking-tighter drop-shadow-[0_0_15px_rgba(219,39,119,0.8)]">
-             MINDER<span className="text-pink-600">.LOL</span>
+             MINDER<span className="text-pink-600">_</span>
            </h1>
            <p className="text-[9px] text-pink-500 font-mono bg-pink-900/20 px-2 py-1 rounded border border-pink-500/30">
              COULDN'T ADD THE 'T', CAN'T AFFORD LAWSUITS.
@@ -209,7 +231,7 @@ export default function MinderHub() {
         {/* Mobile Header (replaces standard header on small screens) */}
         <div className="flex flex-col items-center justify-center md:hidden mb-6 mt-4 w-full">
            <h1 className="text-3xl font-black italic tracking-tighter drop-shadow-[0_0_10px_rgba(219,39,119,0.8)]">
-             MINDER<span className="text-pink-600">.LOL</span>
+             MINDER<span className="text-pink-600">_</span>
            </h1>
            <p className="text-[8px] text-pink-400 font-mono mt-1 text-center px-4">
              COULDN'T ADD THE 'T', CAN'T AFFORD LAWSUITS.
