@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, useMotionValue, useTransform, useAnimation, AnimatePresence } from "framer-motion";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
@@ -52,7 +52,6 @@ export default function MinderHub() {
     const { data, error } = await query;
     
     if (data && data.length > 0) {
-      // Reverse data so the newest in the batch is at the top of the visual stack
       setTargets(prev => [...data.reverse(), ...prev]);
       setPageOffset(currentOffset + limit);
     }
@@ -67,11 +66,8 @@ export default function MinderHub() {
       setSession(activeSession);
       await fetchTargets(0, activeSession);
 
-      // LIVE RADAR LISTENER
-// LIVE SYSTEM UPLINK (RADAR & NEW TARGETS)
+      // LIVE SYSTEM UPLINK (RADAR & NEW TARGETS)
       const channel = supabase.channel('minder-system')
-        
-        // Listener 1: The Radar Feed (Swipes)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'minder_swipes' }, async (payload) => {
            const { data: t } = await supabase.from('minder_targets').select('alias').eq('id', payload.new.target_id).single();
            const alias = t?.alias || 'UNKNOWN';
@@ -80,19 +76,10 @@ export default function MinderHub() {
            
            setFeed(prev => [{ id: payload.new.id, text: `> AGENT_*** ${action}ED [${alias}]`, color }, ...prev].slice(0, 20));
         })
-        
-        // Listener 2: Grid Auto-Injector (New Targets)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'minder_targets' }, (payload) => {
            const newTarget = payload.new;
-           
-           // SECURITY: Don't show the user their own newly created profile
            if (activeSession?.user?.id !== newTarget.user_id) {
-               // Inject the new target at the BEGINNING of the array.
-               // Because our physics stack maps the end of the array to the "Top" card,
-               // putting this at the beginning slides it silently into the bottom of the deck.
                setTargets(prev => [newTarget, ...prev]);
-               
-               // Optional: Trigger a radar alert that new meat arrived
                setFeed(prev => [{ 
                  id: `new-${newTarget.id}`, 
                  text: `> NEW TARGET ENTERED GRID: [${newTarget.alias}]`, 
@@ -101,6 +88,13 @@ export default function MinderHub() {
            }
         })
         .subscribe();
+
+      return () => supabase.removeChannel(channel);
+    };
+
+    initializeData();
+  }, [supabase, fetchTargets]);
+
   // 2. SWIPE MUTATION LOGIC
   const processSwipe = async (direction, targetId) => {
     if (!session) {
@@ -110,19 +104,15 @@ export default function MinderHub() {
 
     const action = direction === 'right' ? 'SMASH' : 'PASS';
     
-    // Remove the top card from state locally to ensure UI speed
     setTargets(prev => {
       const newDeck = [...prev];
-      newDeck.pop(); // Remove the last item (which is visually the top card)
-      
-      // Auto-fetch trigger: If deck is getting low, fetch more silently
+      newDeck.pop(); 
       if (newDeck.length < 3 && !fetchingMore) {
         fetchTargets(pageOffset, session);
       }
       return newDeck;
     });
 
-    // Asynchronous database write
     await supabase.from('minder_swipes').insert([{
       swiper_id: session.user.id,
       target_id: targetId,
@@ -223,11 +213,9 @@ export default function MinderHub() {
             </div>
           ) : (
             targets.map((target, index) => {
-              // Calculate explicit positions to create the 3D stacking effect
               const isTop = index === targets.length - 1;
               const positionFromTop = targets.length - 1 - index;
               
-              // Only render the top 3 cards to save DOM nodes
               if (positionFromTop > 2) return null;
 
               return (
@@ -281,23 +269,20 @@ export default function MinderHub() {
 }
 
 // ------------------------------------------------------------------
-// ADVANCED PHYSICS CARD COMPONENT (Memoized for High Performance)
+// ADVANCED PHYSICS CARD COMPONENT
 // ------------------------------------------------------------------
 const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onForceMatch }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
   
-  // 3D Visual Mathematics
   const rotate = useTransform(x, [-200, 200], [-10, 10]);
   const scale = isTop ? 1 : 1 - (depthIndex * 0.05);
   const yOffset = isTop ? 0 : depthIndex * 15;
   
-  // Dynamic Opacity Interpolation based on drag distance
   const smashOpacity = useTransform(x, [10, 100], [0, 1]);
   const passOpacity = useTransform(x, [-10, -100], [0, 1]);
   const glitchOffset = useTransform(x, [-150, 150], [-10, 10]);
 
-  // Keyboard Navigation Bindings
   useEffect(() => {
     if (!isTop) return;
     
@@ -313,16 +298,13 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onF
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isTop]);
 
-  // Animation Execution Logic
   const triggerSwipeAnimation = async (direction) => {
     const isAllowed = await onSwipe(direction);
     if (!isAllowed) {
-      // Security rejection: Snap back to center
       controls.start({ x: 0, rotate: 0, transition: { type: "spring", stiffness: 300, damping: 20 } });
       return;
     }
 
-    // Velocity-based exit trajectory
     const exitX = direction === 'right' ? 500 : -500;
     const exitRotate = direction === 'right' ? 20 : -20;
     
@@ -345,12 +327,10 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onF
     } else if (swipeLeft) {
       await triggerSwipeAnimation('left');
     } else {
-      // Spring back physics if threshold not met
       controls.start({ x: 0, rotate: 0, transition: { type: "spring", stiffness: 400, damping: 25 } });
     }
   };
 
-  // Logic: Predictable random hash for Red Flag Score
   const redFlagScore = React.useMemo(() => {
     const hash = target.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return (hash % 99) + 1;
@@ -373,15 +353,10 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onF
       whileTap={isTop ? { cursor: "grabbing", scale: 1.02 } : {}}
       className={`absolute w-full h-full rounded-2xl bg-[#0a0a0a] shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden border ${isTop ? 'border-gray-700 cursor-grab hover:border-gray-500' : 'border-gray-900 pointer-events-none opacity-80'} transition-colors duration-300`}
     >
-      {/* BACKGROUND IMAGE RENDERER */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center" 
-        style={{ backgroundImage: `url(${target.image_url})` }}
-      >
+      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${target.image_url})` }}>
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
       </div>
 
-      {/* CHROMATIC ABERRATION DRAG EFFECTS */}
       {isTop && (
         <>
           <motion.div 
@@ -395,7 +370,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onF
         </>
       )}
 
-      {/* INTERACTIVE STAMPS */}
       {isTop && (
         <>
           <motion.div 
@@ -413,7 +387,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onF
         </>
       )}
 
-      {/* DATA HUD */}
       <div className="absolute bottom-0 w-full p-6 flex flex-col gap-3">
         <div className="flex justify-between items-end">
           <div>
@@ -421,7 +394,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onF
               {target.alias} <span className="text-xl text-gray-400 font-normal">{target.age}</span>
             </h2>
             
-            {/* CONDITIONAL INTELLIGENCE GATHERING */}
             {session ? (
               <div className="text-sm font-bold text-white bg-pink-600 w-fit px-3 py-1 mt-2 rounded shadow-[0_0_15px_rgba(219,39,119,0.5)] flex items-center gap-2">
                 @{target.instagram_id}
@@ -439,12 +411,10 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, onSwipe, onF
           </div>
         </div>
 
-        {/* SECURE BIO RENDERER */}
         <p className="text-xs text-gray-200 mt-2 font-medium leading-relaxed bg-black/60 p-3 rounded border border-white/10 backdrop-blur-md">
           {session ? target.bio : target.bio.split(' ').map((word, i) => i % 3 === 0 ? '██████' : word).join(' ')}
         </p>
 
-        {/* TACTICAL ACTION BUTTON */}
         {isTop && (
           <div className="mt-4" onPointerDown={(e) => e.stopPropagation()}>
              <button 
