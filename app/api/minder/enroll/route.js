@@ -40,7 +40,7 @@ export async function POST(req) {
     };
 
     // 4. THE BIOMETRIC SCANNER (Gemini API)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `
       Analyze this image. You are a strict gatekeeper for a dating app.
       Does the image primarily focus on a clear HUMAN face/body, or an ANIMAL (like a dog, cat, etc)?
