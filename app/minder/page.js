@@ -24,49 +24,62 @@ export default function MinderHub() {
   const [pageOffset, setPageOffset] = useState(0);
   const [fetchingMore, setFetchingMore] = useState(false);
 
-  // 1. DATA INGESTION (NOW INCLUDES EVERYONE INCLUDING YOU)
+  // 1. REINFORCED DATA INGESTION
+  // This logic is now shielded against malformed SQL string errors.
   const fetchTargets = useCallback(async (currentOffset = 0, currentSession = session) => {
     setFetchingMore(true);
     const limit = 20; 
     
     try {
-      // Establish the connection to the minder_targets vault
+      // Step A: Initialize the base query without filters
       let query = supabase
         .from('minder_targets')
         .select('*')
         .order('created_at', { ascending: false })
         .range(currentOffset, currentOffset + limit - 1);
       
+      // Step B: Handle Swiped Exclusion Safely
       if (currentSession?.user?.id) {
-        // We only exclude what you have already swiped on to keep the deck fresh
         const { data: swiped, error: swipeError } = await supabase
           .from('minder_swipes')
           .select('target_id')
           .eq('swiper_id', currentSession.user.id);
           
-        if (swipeError) console.error("RADAR ERROR: Could not fetch swipe history.");
-
-        const swipedIds = swiped?.map(s => s.target_id) || [];
-        
-        if (swipedIds.length > 0) {
-          query = query.not('id', 'in', `(${swipedIds.join(',')})`);
+        if (swipeError) {
+          console.error("RADAR ERROR: Could not retrieve swipe history.");
+        } else {
+          const swipedIds = swiped?.map(s => s.target_id).filter(id => !!id) || [];
+          
+          // Only apply the filter if we actually have IDs to exclude
+          // This prevents the 'id.not.in.()' malformed SQL error
+          if (swipedIds.length > 0) {
+            query = query.not('id', 'in', `(${swipedIds.join(',')})`);
+          }
         }
-        // [REMOVED]: neq('user_id') filter is gone. Your own profile will now render.
+        // SELF-EXCLUSION REMOVED: You will now see your own card in the stack.
       }
 
+      // Step C: Execute and Validate
       const { data, error } = await query;
-      if (error) throw error;
+      
+      if (error) {
+        console.error("🚨 DATABASE REJECTION:", error.message);
+        throw error;
+      }
       
       if (data && data.length > 0) {
         setTargets(prev => {
           const existingIds = new Set(prev.map(t => t.id));
           const newTargets = data.filter(t => !existingIds.has(t.id));
+          // Reverse ensures the stack renders with the newest on top
           return [...newTargets.reverse(), ...prev];
         });
         setPageOffset(currentOffset + limit);
+      } else {
+        console.log("Sector Scan Result: 0 new biological signatures detected.");
       }
     } catch (err) {
-      console.error("🚨 CRITICAL SYSTEM FAILURE:", err.message);
+      console.error("CRITICAL UPLINK FAILURE:", err);
     } finally {
       setLoading(false);
       setFetchingMore(false);
@@ -79,11 +92,11 @@ export default function MinderHub() {
       setSession(activeSession);
       await fetchTargets(0, activeSession);
 
-      // 2. PROMINENT REALTIME SYSTEM UPLINK
+      // 2. GLOBAL FEED REALTIME LISTENER
       const channel = supabase.channel('minder-system')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'minder_swipes' }, async (payload) => {
            const { data: t } = await supabase.from('minder_targets').select('alias').eq('id', payload.new.target_id).single();
-           const alias = t?.alias || 'UNKNOWN_OBJECT';
+           const alias = t?.alias || 'UNKNOWN_TARGET';
            const action = payload.new.action;
            const color = action === 'SMASH' ? 'text-green-500' : action === 'PASS' ? 'text-red-500' : 'text-purple-500';
            
@@ -94,7 +107,7 @@ export default function MinderHub() {
            setTargets(prev => [newTarget, ...prev]);
            setFeed(prev => [{ 
              id: `new-${newTarget.id}`, 
-             text: `> NEW BIOMETRIC DETECTED: [${newTarget.alias}]`, 
+             text: `> NEW TARGET ENTERED GRID: [${newTarget.alias}]`, 
              color: 'text-yellow-500' 
            }, ...prev].slice(0, 40));
         })
@@ -146,14 +159,14 @@ export default function MinderHub() {
   return (
     <div className="min-h-screen bg-[#020205] text-white overflow-hidden flex flex-col md:flex-row font-mono relative">
       
-      {/* 3D PERSPECTIVE BACKGROUND GRID */}
+      {/* --- BACKGROUND ARCHITECTURE --- */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden perspective-[1200px]">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.6)_50%),linear-gradient(90deg,rgba(255,0,255,0.02),rgba(0,255,255,0.01),rgba(255,255,255,0.02))] bg-[length:100%_4px,3px_100%]" />
         <div className="absolute bottom-[-50%] left-[-50%] right-[-50%] h-[150%] bg-[linear-gradient(transparent_95%,rgba(219,39,119,0.15)_100%),linear-gradient(90deg,transparent_95%,rgba(219,39,119,0.15)_100%)] bg-[size:50px_50px] [transform:rotateX(80deg)] animate-[grid-move_12s_linear_infinite] opacity-40" />
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-transparent via-[#020205]/80 to-[#020205] z-10" />
       </div>
 
-      {/* TACTICAL NAVIGATION */}
+      {/* --- NAVIGATION --- */}
       <nav className="fixed top-0 w-full p-4 md:p-6 flex justify-between items-center z-50">
         <Link href="/" className="group flex items-center gap-3 text-xs font-black text-gray-400 hover:text-white transition-all uppercase tracking-tighter bg-black/80 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl shadow-lg">
           <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> RETURN TO BASE
@@ -169,7 +182,7 @@ export default function MinderHub() {
         </div>
       </nav>
 
-      {/* PRIMARY GLOBAL FEED SIDEBAR */}
+      {/* --- PROMINENT GLOBAL FEED --- */}
       <div className="hidden md:flex flex-col w-[400px] bg-black/90 backdrop-blur-2xl border-r border-pink-600/30 p-8 z-10 shadow-[40px_0_100px_rgba(0,0,0,0.9)] pt-32 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-pink-500/5 via-transparent to-transparent animate-[scan_6s_linear_infinite] pointer-events-none" />
 
@@ -209,10 +222,10 @@ export default function MinderHub() {
         </div>
       </div>
 
-      {/* MAIN TARGETING VIEWPORT */}
+      {/* --- MAIN GRID CENTER --- */}
       <div className="flex-1 flex flex-col items-center justify-center relative z-10 p-6 pt-24 md:pt-0">
         
-        {/* Mobile Header Only */}
+        {/* Mobile Header */}
         <div className="flex flex-col items-center justify-center md:hidden mb-10 w-full">
            <h1 className="text-4xl font-black italic tracking-tighter drop-shadow-[0_0_15px_rgba(219,39,119,0.8)]">
              MINDER<span className="text-pink-600">_</span>
@@ -235,7 +248,7 @@ export default function MinderHub() {
           )}
         </AnimatePresence>
 
-        {/* THE STACK */}
+        {/* TARGET VIEWPORT */}
         <div className="relative w-full max-w-[420px] h-[600px] md:h-[700px] flex items-center justify-center">
           {loading ? (
             <div className="text-pink-500 flex flex-col items-center gap-6">
@@ -264,6 +277,7 @@ export default function MinderHub() {
               const positionFromTop = targets.length - 1 - index;
               const isOwnCard = session?.user?.id === target.user_id;
               
+              // Render top 4 cards for visual depth
               if (positionFromTop > 3) return null;
 
               return (
@@ -281,26 +295,6 @@ export default function MinderHub() {
             })
           )}
         </div>
-
-        {/* MOBILE FEED FALLBACK */}
-        <div className="md:hidden absolute bottom-4 w-[calc(100%-2rem)] max-w-[420px] bg-black/90 backdrop-blur-2xl border-t-4 border-pink-600 p-5 rounded-t-2xl z-20 shadow-[0_-20px_50px_rgba(219,39,119,0.3)]">
-          <div className="text-xs text-pink-500 mb-4 font-black flex items-center gap-3 tracking-[0.2em] drop-shadow-[0_0_10px_rgba(219,39,119,0.8)]"><Activity className="w-4 h-4 animate-pulse"/> SECURE FEED</div>
-          <div className="h-20 overflow-hidden relative">
-            <AnimatePresence mode="popLayout">
-              {feed.slice(0, 3).map((item) => (
-                 <motion.div 
-                   key={item.id}
-                   initial={{ opacity: 0, y: 15 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   className={`text-[10px] font-black truncate ${item.color} mb-2 tracking-wide`}
-                 >
-                   {item.text}
-                 </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-
       </div>
 
       <style jsx global>{`
@@ -315,7 +309,7 @@ export default function MinderHub() {
 }
 
 // ------------------------------------------------------------------
-// REFINED PHYSICS CARD COMPONENT
+// ADVANCED PHYSICS CARD COMPONENT
 // ------------------------------------------------------------------
 const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, onSwipe, onForceMatch }) => {
   const x = useMotionValue(0);
@@ -389,30 +383,24 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
       whileTap={isTop && !isOwnCard ? { cursor: "grabbing", scale: 1.03 } : {}}
       className={`absolute w-full h-full rounded-[2.5rem] bg-[#0a0a0f] shadow-[0_40px_100px_rgba(0,0,0,1)] overflow-hidden border-2 ${isTop && !isOwnCard ? 'border-white/10 hover:border-white/20' : isOwnCard && isTop ? 'border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.25)]' : 'border-white/5 opacity-50'} transition-colors duration-500`}
     >
-      {/* Target Media Asset */}
       <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${target.image_url})` }}>
         <div className="absolute inset-0 bg-gradient-to-t from-[#020205] via-[#020205]/40 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-b from-[#020205]/60 via-transparent to-transparent h-48" />
       </div>
 
-      {/* OWN PROFILE PROTOCOL */}
       {isOwnCard && isTop && (
         <div className="absolute top-10 left-0 w-full bg-yellow-500 text-black py-2.5 font-black text-center tracking-[0.3em] text-[9px] uppercase z-30 shadow-2xl flex items-center justify-center gap-3">
           <User className="w-4 h-4" /> BIOMETRIC MATCH: YOU ARE VIEWING YOURSELF
         </div>
       )}
 
-      {/* Dynamic Drag HUD */}
       {isTop && !isOwnCard && (
         <>
           <motion.div style={{ opacity: smashOpacity }} className="absolute top-24 left-10 border-[10px] border-green-500 text-green-500 font-black text-7xl px-10 py-4 rounded-3xl rotate-[-12deg] uppercase z-20 backdrop-blur-sm bg-black/20 shadow-[0_0_60px_rgba(34,197,94,0.8)]">SMASH</motion.div>
           <motion.div style={{ opacity: passOpacity }} className="absolute top-24 right-10 border-[10px] border-red-500 text-red-500 font-black text-7xl px-10 py-4 rounded-3xl rotate-[12deg] uppercase z-20 backdrop-blur-sm bg-black/20 shadow-[0_0_60px_rgba(239,68,68,0.8)]">PASS</motion.div>
-          <motion.div className="absolute inset-0 bg-green-500/10 pointer-events-none mix-blend-overlay" style={{ opacity: smashOpacity }} />
-          <motion.div className="absolute inset-0 bg-red-500/10 pointer-events-none mix-blend-overlay" style={{ opacity: passOpacity }} />
         </>
       )}
 
-      {/* DATA HUD: BOTTOM BLOCK */}
       <div className="absolute bottom-0 w-full p-8 flex flex-col gap-4 bg-gradient-to-t from-black via-black/80 to-transparent">
         <div className="flex justify-between items-end">
           <div className="flex-1 min-w-0 pr-4">
