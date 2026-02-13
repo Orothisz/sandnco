@@ -34,7 +34,7 @@ const siteConfig = {
   hero: {
     line1: "MANFACTURED",
     line2: "COINCIDENCES",
-    subhead: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.",
+    subhead: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.(website is unstable n under beta testing)",
     manifesto: "WE DON'T FIND LOVE. WE FORCE IT. WE DON'T WAIT FOR BREAKUPS. WE ENGINEER THEM.",
   },
   liveFeed: [
