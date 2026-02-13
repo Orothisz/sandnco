@@ -32,7 +32,7 @@ const siteConfig = {
     status: "OPERATIONAL",
   },
   hero: {
-    line1: "MANUFACTURED",
+    line1: "MANFACTURED",
     line2: "COINCIDENCES",
     subhead: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.",
     manifesto: "WE DON'T FIND LOVE. WE FORCE IT. WE DON'T WAIT FOR BREAKUPS. WE ENGINEER THEM.",
@@ -412,7 +412,7 @@ export default function Home() {
                  </div>
                  
                  <h2 className="text-4xl md:text-7xl font-black uppercase text-white mb-2 italic tracking-tighter drop-shadow-[0_0_15px_rgba(219,39,119,0.5)]">
-                   MINDER<span className="text-pink-600">.LOL</span>
+                   MINDER_<span className="text-pink-600">.LOL</span>
                  </h2>
                  
                  <div className="inline-block bg-pink-900/40 border-l-4 border-pink-500 p-3 mb-6">
