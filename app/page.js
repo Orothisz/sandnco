@@ -1,11 +1,11 @@
 "use client";
 
-import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Siren, 
   Terminal, ChevronRight, LogOut, Flame, Crosshair, Zap,
-  Radar, Activity // <-- FIXED: Added missing icons causing the Vercel crash
+  Radar, Activity, MapPin
 } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -26,7 +26,7 @@ const siteConfig = {
     line1: "MANUFACTURED",
     line2: "COINCIDENCES",
     subhead: "FARIDABAD’S PREMIERE BLACK-OPS ROMANCE SYNDICATE.",
-    beta: "(website is unstable n under beta testing)",
+    beta: "(SECURE TERMINAL // BETA PHASE)",
     manifesto: "WE DON'T FIND LOVE. WE FORCE IT. WE DON'T WAIT FOR BREAKUPS. WE ENGINEER THEM.",
   },
   liveFeed: [
@@ -101,7 +101,7 @@ const siteConfig = {
 };
 
 // ============================================================================
-// CINEMATIC COMPONENTS
+// CINEMATIC COMPONENTS (OPTIMIZED FOR 60FPS MOBILE)
 // ============================================================================
 
 const NoiseOverlay = () => (
@@ -117,39 +117,33 @@ const Scanlines = () => (
   <div className="fixed inset-0 pointer-events-none z-[6] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.2)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,3px_100%] will-change-transform" />
 );
 
+// 60FPS Pure CSS Marquee (Replaced JS Framer Motion for flawless mobile scrolling)
 const PoliceTape = ({ text, direction = "left", rotate = "rotate-2" }) => (
   <div className={`w-[120%] -ml-[10%] bg-[#eab308] text-black py-3 font-black text-xl md:text-2xl uppercase tracking-[0.2em] overflow-hidden border-y-4 border-black ${rotate} shadow-[0_10px_30px_rgba(0,0,0,0.5)] relative z-20 will-change-transform`}>
-    <motion.div 
-      animate={{ x: direction === "left" ? ["0%", "-50%"] : ["-50%", "0%"] }}
-      transition={{ repeat: Infinity, duration: 15, ease: "linear" }}
-      className="flex gap-10 whitespace-nowrap"
-    >
-      {Array(20).fill(text).map((t, i) => (
+    <div className={`flex gap-10 whitespace-nowrap ${direction === "left" ? 'animate-marquee-left' : 'animate-marquee-right'}`}>
+      {Array(15).fill(text).map((t, i) => (
         <span key={i} className="flex items-center gap-4">
           <ShieldAlert className="w-6 h-6 md:w-8 md:h-8" /> {t}
         </span>
       ))}
-    </motion.div>
+    </div>
   </div>
 );
 
-// High-Fidelity Kinetic Glitch Text
+// Violent Hover Glitch Effect
 const KineticGlitch = ({ text }) => {
   return (
     <div className="relative inline-block group cursor-crosshair">
-      {/* Base Text */}
       <span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-b from-gray-500 via-gray-700 to-gray-900 group-hover:text-white transition-colors duration-300">
         {text}
       </span>
-      
-      {/* Glitch Layers (Only appear on hover/tap) */}
-      <span className="absolute top-0 left-0 w-full h-full text-red-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 group-hover:translate-y-1 transition-all duration-75 mix-blend-screen select-none pointer-events-none">
+      <span className="absolute top-0 left-0 w-full h-full text-red-600 opacity-0 group-hover:opacity-100 transition-all duration-75 mix-blend-screen select-none pointer-events-none group-hover:animate-glitch-1">
         {text}
       </span>
-      <span className="absolute top-0 left-0 w-full h-full text-blue-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-75 mix-blend-screen select-none pointer-events-none">
+      <span className="absolute top-0 left-0 w-full h-full text-blue-600 opacity-0 group-hover:opacity-100 transition-all duration-75 mix-blend-screen select-none pointer-events-none group-hover:animate-glitch-2">
         {text}
       </span>
-      <span className="absolute top-0 left-0 w-full h-full text-white opacity-0 group-hover:opacity-100 group-hover:translate-x-2 group-hover:blur-[2px] transition-all duration-100 mix-blend-overlay select-none pointer-events-none">
+      <span className="absolute top-0 left-0 w-full h-full text-white opacity-0 group-hover:opacity-100 transition-all duration-100 mix-blend-overlay select-none pointer-events-none group-hover:blur-[2px]">
         {text}
       </span>
     </div>
@@ -196,17 +190,14 @@ export default function Home() {
   const router = useRouter();
   const supabase = createClientComponentClient();
   
-  // Parallax Setup
   const { scrollYProgress } = useScroll();
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "40%"]);
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
   
-  // State
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [agreed, setAgreed] = useState(true); // Default true, checked in useEffect
+  const [agreed, setAgreed] = useState(true); 
   const [progress, setProgress] = useState(0);
 
-  // 3D Mouse Tracking for Minder Ad
   const adRef = useRef(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -218,14 +209,12 @@ export default function Home() {
     setMousePos({ x, y });
   };
 
-  // 1. AUTH & WAIVER CHECK (Once per 24hrs)
+  // AUTH & WAIVER CHECK (Once per 24hrs)
   useEffect(() => {
     const checkUserAndWaiver = async () => {
-      // Auth Check
       const { data: { session } } = await supabase.auth.getSession();
       setIsLoggedIn(!!session);
 
-      // Waiver Logic (24 Hour Expiry)
       const waiverKey = 'sandnco_waiver_accepted';
       const lastAccepted = localStorage.getItem(waiverKey);
       
@@ -234,7 +223,6 @@ export default function Home() {
       } else {
         const now = new Date().getTime();
         const timeSince = now - parseInt(lastAccepted);
-        // 86400000 ms = 24 Hours
         if (timeSince > 86400000) {
           localStorage.removeItem(waiverKey);
           setAgreed(false);
@@ -279,7 +267,7 @@ export default function Home() {
   };
 
   // --------------------------------------------------------------------------
-  // WAIVER SCREEN (Rendered if not agreed today)
+  // WAIVER SCREEN
   // --------------------------------------------------------------------------
   if (!agreed) {
     return (
@@ -327,55 +315,56 @@ export default function Home() {
         <link rel="icon" href="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=32" />
       </Head>
 
-      <main className="bg-[#020205] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans">
+      <main className="bg-[#020205] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans relative">
         <NoiseOverlay />
         <Scanlines />
         <PanicButton />
 
         {/* --- PREMIUM NAVBAR --- */}
-        <nav className="fixed top-0 w-full z-50 px-4 md:px-8 py-4 flex flex-wrap justify-between items-center bg-[#020205]/80 backdrop-blur-xl border-b border-white/10 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <img src="/logo.png" className="w-8 h-8 md:w-10 md:h-10 object-contain invert hover:rotate-12 transition-transform" alt="logo" />
-              <span className="font-black text-xl md:text-2xl italic tracking-tighter text-white drop-shadow-md">
-                {siteConfig.identity.name}<span className="text-red-600">{siteConfig.identity.domain}</span>
+        <nav className="fixed top-0 w-full z-50 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center bg-[#020205]/80 backdrop-blur-xl border-b border-white/10 shadow-2xl">
+            {/* Logo */}
+            <Link href="/" className="flex items-center gap-2 md:gap-3 group shrink-0">
+              <img src="/logo.png" className="w-8 h-8 md:w-10 md:h-10 object-contain invert group-hover:rotate-12 transition-transform" alt="logo" />
+              <span className="hidden sm:block font-black text-xl md:text-2xl italic tracking-tighter text-white drop-shadow-md">
+                SANDNCO<span className="text-red-600">.LOL</span>
               </span>
-            </div>
+            </Link>
 
-            <div className="flex items-center gap-4 md:gap-8 text-[10px] md:text-xs font-mono tracking-widest uppercase font-bold">
+            {/* Navigation & Actions */}
+            <div className="flex items-center gap-3 md:gap-6 text-[10px] md:text-xs font-mono tracking-widest uppercase font-bold">
+              
+              {/* Premier Minder Badge (Visible on ALL devices) */}
+              <Link href="/minder" className="group shrink-0">
+                <span className="flex items-center gap-1.5 md:gap-2 text-pink-500 group-hover:text-white transition-colors border border-pink-500/50 bg-pink-900/20 px-3 md:px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)]">
+                  <Crosshair className="w-3 h-3 md:w-4 md:h-4 animate-spin-slow" /> 
+                  <span className="font-black">MINDER</span>
+                </span>
+              </Link>
+
+              {/* Desktop Only Links */}
               <div className="hidden lg:flex gap-6 items-center">
-                {/* PREMIER MINDER ADVERTISEMENT IN NAV */}
-                <Link href="/minder" className="group">
-                  <span className="flex items-center gap-2 text-pink-500 group-hover:text-white transition-colors border border-pink-500/50 bg-pink-900/20 px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)]">
-                    <Crosshair className="w-3 h-3 animate-spin-slow" /> MINDER GRID
-                  </span>
-                </Link>
-                <Link href="#pricing"><span className="text-gray-400 hover:text-white transition-colors">Pricing</span></Link>
-                <Link href="/legal"><span className="text-gray-400 hover:text-white transition-colors">Legal</span></Link>
+                <Link href="#pricing"><span className="text-gray-400 hover:text-white transition-colors cursor-pointer">Pricing</span></Link>
+                <Link href="/legal"><span className="text-gray-400 hover:text-white transition-colors cursor-pointer">Legal</span></Link>
               </div>
               
+              {/* Dynamic Auth Buttons */}
               {isLoggedIn ? (
-                <div className="flex items-center gap-2 md:gap-4">
-                  <Link href="/minder" className="lg:hidden">
-                    <button className="bg-pink-600/20 border border-pink-500 text-pink-500 p-2 rounded-full"><Crosshair className="w-4 h-4" /></button>
-                  </Link>
+                <div className="flex items-center gap-2 md:gap-4 shrink-0">
                   <Link href="/dashboard">
-                    <button className="flex items-center gap-2 bg-green-900/30 border border-green-500/50 text-green-400 px-4 py-2 hover:bg-green-500 hover:text-black transition-all rounded">
-                      <Terminal className="w-4 h-4" /> <span className="hidden sm:inline">DASHBOARD</span>
+                    <button className="flex items-center gap-2 bg-green-900/30 border border-green-500/50 text-green-400 px-3 md:px-4 py-1.5 md:py-2 hover:bg-green-500 hover:text-black transition-all rounded font-black">
+                      <Terminal className="w-3 h-3 md:w-4 md:h-4" /> <span className="hidden sm:inline">DASHBOARD</span><span className="sm:hidden">DASH</span>
                     </button>
                   </Link>
-                  <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 hover:text-white border border-red-500/30 px-4 py-2 rounded hover:bg-red-600 transition-colors">
-                    <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">LOGOUT</span>
+                  <button onClick={handleLogout} className="hidden sm:flex items-center gap-2 text-red-500 hover:text-white border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-600 transition-colors font-black">
+                    <LogOut className="w-3 h-3" />
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-4">
-                  <Link href="/minder" className="lg:hidden">
-                    <button className="bg-pink-600/20 border border-pink-500 text-pink-500 p-2 rounded-full"><Crosshair className="w-4 h-4" /></button>
-                  </Link>
-                  <Link href="/login"><span className="hidden sm:inline text-gray-400 hover:text-white transition-colors">LOGIN</span></Link>
+                <div className="flex items-center gap-3 shrink-0">
+                  <Link href="/login" className="hidden sm:inline-block"><span className="text-gray-400 hover:text-white transition-colors cursor-pointer font-black">LOGIN</span></Link>
                   <Link href="/login">
-                    <button className="bg-white text-black px-6 py-2 hover:bg-red-600 hover:text-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.4)] rounded hover:scale-105 active:scale-95">
-                      LOG IN
+                    <button className="bg-white text-black px-4 md:px-6 py-1.5 md:py-2 hover:bg-red-600 hover:text-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.4)] rounded hover:scale-105 active:scale-95 font-black">
+                      <span className="hidden sm:inline">ENROLL</span><span className="sm:hidden">LOGIN</span>
                     </button>
                   </Link>
                 </div>
@@ -384,114 +373,116 @@ export default function Home() {
         </nav>
 
         {/* --- CINEMATIC HERO SECTION --- */}
-        <section className="relative min-h-[100dvh] flex flex-col justify-center items-center pt-20 px-4 overflow-hidden">
+        <section className="relative min-h-[100dvh] flex flex-col justify-center items-center pt-24 px-4 overflow-hidden">
+          
+          {/* Cyber-Grid Floor */}
+          <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [transform:perspective(500px)_rotateX(60deg)_translateY(-100px)_translateZ(-200px)]" />
+          </div>
+
           <motion.div style={{ y, opacity }} className="relative z-10 text-center max-w-[1400px] w-full flex flex-col items-center">
             
-            <div className="inline-flex items-center gap-3 px-5 py-2 border border-yellow-500/50 bg-yellow-900/20 rounded-full mb-10 backdrop-blur-md shadow-[0_0_30px_rgba(234,179,8,0.3)]">
-               <Siren className="w-4 h-4 text-yellow-500 animate-pulse" />
-               <span className="text-[10px] md:text-xs font-black tracking-[0.2em] text-yellow-400 uppercase">
+            <div className="inline-flex items-center gap-2 md:gap-3 px-4 md:px-5 py-2 border border-yellow-500/50 bg-yellow-900/20 rounded-full mb-8 md:mb-10 backdrop-blur-md shadow-[0_0_30px_rgba(234,179,8,0.3)]">
+               <Siren className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 animate-pulse" />
+               <span className="text-[9px] md:text-xs font-black tracking-[0.2em] text-yellow-400 uppercase">
                  COST WAIVER ACTIVE: FREE UNTIL MARCH 12
                </span>
             </div>
 
-            <h1 className="text-[12vw] md:text-[10vw] leading-[0.85] font-black tracking-tighter mb-8 relative select-none w-full flex flex-col items-center justify-center">
-               <span className="block text-white drop-shadow-[0_10px_30px_rgba(255,255,255,0.2)]">
+            <h1 className="text-[14vw] md:text-[10vw] leading-[0.85] font-black tracking-tighter mb-8 relative select-none w-full flex flex-col items-center justify-center z-20">
+               <span className="block text-white drop-shadow-[0_10px_30px_rgba(255,255,255,0.2)] mix-blend-screen">
                  {siteConfig.hero.line1}
                </span>
                <span className="block mt-2 md:mt-0">
-                 {/* KINETIC GLITCH TEXT */}
                  <KineticGlitch text={siteConfig.hero.line2} />
                </span>
             </h1>
 
-            <p className="text-sm md:text-xl font-black uppercase tracking-[0.3em] text-red-500 mb-2 drop-shadow-md max-w-3xl">
+            <p className="text-xs md:text-xl font-black uppercase tracking-[0.3em] text-red-500 mb-2 drop-shadow-md max-w-3xl leading-relaxed px-4">
               {siteConfig.hero.subhead}
             </p>
-            <p className="text-[9px] md:text-[10px] font-mono tracking-widest text-gray-500 mb-12 uppercase">
+            <p className="text-[9px] md:text-[10px] font-mono tracking-widest text-gray-500 mb-10 md:mb-12 uppercase">
               {siteConfig.hero.beta}
             </p>
 
-            <div className="flex flex-col md:flex-row gap-6 md:gap-8 justify-center items-center w-full max-w-2xl">
+            <div className="flex flex-col md:flex-row gap-6 md:gap-8 justify-center items-center w-full max-w-2xl px-4 relative z-30">
               <Link href="/login?next=/request" className="w-full md:w-auto">
-                  <button className="w-full md:w-auto px-10 py-5 bg-white text-black font-black text-sm md:text-base uppercase tracking-[0.2em] hover:bg-red-600 hover:text-white transition-all shadow-[0_0_50px_rgba(255,255,255,0.3)] rounded-xl hover:scale-105 active:scale-95 flex items-center justify-center gap-3">
-                    <Terminal className="w-5 h-5" /> INITIATE PROTOCOL
+                  <button className="w-full md:w-auto px-8 md:px-10 py-4 md:py-5 bg-white text-black font-black text-sm md:text-base uppercase tracking-[0.2em] hover:bg-red-600 hover:text-white transition-all shadow-[0_0_50px_rgba(255,255,255,0.3)] rounded-xl hover:scale-105 active:scale-95 flex items-center justify-center gap-3">
+                    <Terminal className="w-4 h-4 md:w-5 md:h-5" /> INITIATE PROTOCOL
                   </button>
               </Link>
-              <p className="text-[10px] md:text-xs font-mono text-gray-500 max-w-[250px] text-center md:text-left border-t md:border-t-0 md:border-l-2 border-gray-800 pt-4 md:pt-0 md:pl-6 leading-relaxed">
+              <p className="text-[9px] md:text-xs font-mono text-gray-500 max-w-[280px] text-center md:text-left border-t md:border-t-0 md:border-l-2 border-gray-800 pt-4 md:pt-0 md:pl-6 leading-relaxed">
                 // {siteConfig.hero.manifesto}
               </p>
             </div>
           </motion.div>
 
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] md:w-[1000px] md:h-[1000px] bg-red-600/10 rounded-full blur-[150px] pointer-events-none" />
+          {/* Deep Ambient Glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[800px] md:h-[800px] bg-red-600/20 rounded-full blur-[100px] md:blur-[150px] pointer-events-none z-0" />
         </section>
 
-        {/* --- KINETIC POLICE TAPE --- */}
-        <div className="relative py-16 md:py-24 overflow-hidden bg-black/50 backdrop-blur-sm border-y border-white/5">
+        {/* --- 60FPS CSS POLICE TAPE --- */}
+        <div className="relative py-12 md:py-24 overflow-hidden bg-black/50 backdrop-blur-sm border-y border-white/5">
            <PoliceTape text="FREE SERVICES UNTIL MARCH 12 // BETA TESTING PHASE" rotate="rotate-2" direction="left" />
            <PoliceTape text="NO PAYMENTS REQUIRED // TOTAL ANONYMITY GUARANTEED" rotate="-rotate-1" direction="right" />
         </div>
 
-        {/* --- LIVE KILL LOG Ticker --- */}
+        {/* --- 60FPS CSS LIVE KILL LOG --- */}
         <div className="w-full bg-[#050505] border-b border-white/10 py-4 overflow-hidden relative z-20 shadow-inner">
-          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#050505] to-transparent z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#050505] to-transparent z-10" />
-          <motion.div 
-            className="flex gap-20 whitespace-nowrap text-[10px] md:text-xs font-mono text-green-500 font-bold uppercase tracking-widest"
-            animate={{ x: ["0%", "-50%"] }}
-            transition={{ repeat: Infinity, duration: 30, ease: "linear" }}
-          >
+          <div className="absolute left-0 top-0 bottom-0 w-16 md:w-32 bg-gradient-to-r from-[#050505] to-transparent z-10" />
+          <div className="absolute right-0 top-0 bottom-0 w-16 md:w-32 bg-gradient-to-l from-[#050505] to-transparent z-10" />
+          <div className="flex gap-10 md:gap-20 whitespace-nowrap text-[10px] md:text-xs font-mono text-green-500 font-bold uppercase tracking-widest animate-marquee-left">
             {[...siteConfig.liveFeed, ...siteConfig.liveFeed, ...siteConfig.liveFeed].map((log, i) => (
               <span key={i} className="flex items-center gap-3">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-ping" /> {log}
+                <span className="w-1.5 h-1.5 md:w-2 md:h-2 bg-green-500 rounded-full animate-ping" /> {log}
               </span>
             ))}
-          </motion.div>
+          </div>
         </div>
 
         {/* --- THE PREMIER MINDER ADVERTISEMENT --- */}
-        <section className="px-4 md:px-12 lg:px-20 py-32 max-w-[1600px] mx-auto relative z-20">
+        <section className="px-4 md:px-12 lg:px-20 py-24 md:py-32 max-w-[1600px] mx-auto relative z-20">
            <motion.div
              initial={{ opacity: 0, y: 50 }}
              whileInView={{ opacity: 1, y: 0 }}
              viewport={{ once: true, margin: "-100px" }}
              transition={{ duration: 0.8, ease: "easeOut" }}
-             className="bg-[#0a0a0f]/80 backdrop-blur-2xl border border-pink-500/30 p-8 md:p-16 rounded-[3rem] relative overflow-hidden group shadow-[0_0_100px_rgba(219,39,119,0.15)]"
+             className="bg-[#0a0a0f]/80 backdrop-blur-2xl border border-pink-500/30 p-6 md:p-16 rounded-[2rem] md:rounded-[3rem] relative overflow-hidden group shadow-[0_0_100px_rgba(219,39,119,0.15)]"
              onMouseMove={handleMouseMove}
              ref={adRef}
            >
              <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-pink-600/20 blur-[150px] pointer-events-none transition-opacity group-hover:opacity-100 opacity-50" />
 
-             <div className="flex flex-col lg:flex-row items-center justify-between gap-16 relative z-10">
+             <div className="flex flex-col lg:flex-row items-center justify-between gap-12 md:gap-16 relative z-10">
                
                {/* Content Side */}
                <div className="flex-1 text-center lg:text-left">
-                 <div className="inline-flex items-center gap-3 px-4 py-1.5 bg-pink-500/10 border border-pink-500/50 text-pink-400 text-[10px] font-black tracking-[0.3em] uppercase mb-6 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)]">
-                   <Flame className="w-4 h-4 animate-pulse" /> PREMIER FEATURE
+                 <div className="inline-flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 bg-pink-500/10 border border-pink-500/50 text-pink-400 text-[9px] md:text-[10px] font-black tracking-[0.3em] uppercase mb-6 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)]">
+                   <Flame className="w-3 h-3 md:w-4 md:h-4 animate-pulse" /> PREMIER FEATURE
                  </div>
                  
-                 <h2 className="text-5xl md:text-8xl font-black uppercase text-white mb-4 italic tracking-tighter drop-shadow-[0_0_30px_rgba(219,39,119,0.6)]">
+                 <h2 className="text-4xl md:text-7xl font-black uppercase text-white mb-4 italic tracking-tighter drop-shadow-[0_0_30px_rgba(219,39,119,0.6)]">
                    MINDER<span className="text-pink-600">_</span>
                  </h2>
                  
-                 <div className="inline-block bg-pink-950/40 border-l-4 border-pink-500 p-4 mb-8 rounded-r-xl max-w-xl">
-                    <p className="text-[10px] md:text-xs font-mono text-pink-300 font-bold uppercase tracking-widest leading-relaxed">
+                 <div className="inline-block bg-pink-950/40 border-l-4 border-pink-500 p-3 md:p-4 mb-6 md:mb-8 rounded-r-xl max-w-xl text-left">
+                    <p className="text-[9px] md:text-xs font-mono text-pink-300 font-bold uppercase tracking-widest leading-relaxed">
                       "Couldn't add the 'T' cuz we aren't rich enough and can't afford lawsuits n shit like that."
                     </p>
                  </div>
 
-                 <p className="text-sm md:text-base text-gray-300 font-medium leading-relaxed max-w-xl mb-10 mx-auto lg:mx-0 border-b border-white/10 pb-10">
+                 <p className="text-xs md:text-base text-gray-300 font-medium leading-relaxed max-w-xl mb-8 md:mb-10 mx-auto lg:mx-0 border-b border-white/10 pb-8 md:pb-10 text-left">
                    Welcome to the Black-Ops Meat Market. Browse targets. Log in to decrypt their exact Instagram coordinates. See someone you want? Don't just swipe—hit <strong className="text-pink-400 bg-pink-900/20 px-2 py-0.5 rounded border border-pink-500/30">FORCE MATCH</strong> and let our operatives engineer your serendipity.
                  </p>
                  
-                 <Link href="/minder">
-                   <button className="w-full md:w-auto bg-pink-600 text-white font-black uppercase px-10 py-5 tracking-[0.3em] hover:bg-white hover:text-black transition-all shadow-[0_0_40px_rgba(219,39,119,0.6)] flex items-center justify-center gap-4 hover:scale-105 active:scale-95 rounded-2xl border-2 border-pink-400">
-                     <Crosshair className="w-5 h-5" /> ENTER THE GRID
+                 <Link href="/minder" className="block w-full md:w-auto">
+                   <button className="w-full md:w-auto bg-pink-600 text-white font-black uppercase px-8 md:px-10 py-4 md:py-5 tracking-[0.3em] hover:bg-white hover:text-black transition-all shadow-[0_0_40px_rgba(219,39,119,0.6)] flex items-center justify-center gap-3 md:gap-4 hover:scale-105 active:scale-95 rounded-2xl border-2 border-pink-400 text-xs md:text-sm">
+                     <Crosshair className="w-4 h-4 md:w-5 md:h-5" /> ENTER THE GRID
                    </button>
                  </Link>
                </div>
 
-               {/* Interactive 3D Hologram Terminal */}
+               {/* Interactive 3D Hologram Terminal (Desktop Only) */}
                <motion.div 
                  animate={{ 
                    rotateX: mousePos.y * -20, 
@@ -531,12 +522,12 @@ export default function Home() {
         </section>
 
         {/* --- THE MENU (SERVICES) --- */}
-        <section id="pricing" className="px-4 md:px-12 lg:px-20 pb-40 max-w-[1600px] mx-auto">
-           <div className="mb-16 md:mb-24 text-center md:text-left">
-              <h2 className="text-4xl md:text-7xl font-black uppercase text-white mb-6 tracking-tighter drop-shadow-lg">
+        <section id="pricing" className="px-4 md:px-12 lg:px-20 pb-32 md:pb-40 max-w-[1600px] mx-auto">
+           <div className="mb-12 md:mb-24 text-center md:text-left">
+              <h2 className="text-3xl md:text-7xl font-black uppercase text-white mb-4 md:mb-6 tracking-tighter drop-shadow-lg">
                 Operational <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-purple-600">Menu</span>
               </h2>
-              <p className="text-xs md:text-sm font-mono text-gray-400 font-bold uppercase tracking-[0.3em] bg-white/5 inline-block px-6 py-2 rounded-full border border-white/10">
+              <p className="text-[10px] md:text-sm font-mono text-gray-400 font-bold uppercase tracking-[0.2em] md:tracking-[0.3em] bg-white/5 inline-block px-4 md:px-6 py-2 rounded-full border border-white/10">
                 SECURE CONNECTION ESTABLISHED. SELECT OBJECTIVE.
               </p>
            </div>
@@ -549,45 +540,45 @@ export default function Home() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-50px" }}
                   transition={{ delay: i * 0.1, duration: 0.5 }}
-                  className={`group relative bg-[#0a0a0f] border border-white/10 rounded-3xl p-8 md:p-10 min-h-[500px] flex flex-col justify-between transition-all duration-300 overflow-hidden ${service.hoverBg} ${service.glow}`}
+                  className={`group relative bg-[#0a0a0f] border border-white/10 rounded-3xl p-6 md:p-10 min-h-[400px] md:min-h-[500px] flex flex-col justify-between transition-all duration-300 overflow-hidden ${service.hoverBg} ${service.glow}`}
                 >
                   <div className={`absolute inset-0 border-2 border-transparent ${service.border} transition-colors duration-500 rounded-3xl pointer-events-none`} />
                   
                   <div className="relative z-10">
-                     <div className={`mb-8 p-4 bg-black w-fit rounded-2xl border border-white/5 shadow-lg ${service.color}`}>
+                     <div className={`mb-6 md:mb-8 p-3 md:p-4 bg-black w-fit rounded-2xl border border-white/5 shadow-lg ${service.color}`}>
                        {service.icon}
                      </div>
-                     <h3 className="text-2xl md:text-3xl font-black uppercase italic mb-3 text-white group-hover:translate-x-2 transition-transform duration-300">
+                     <h3 className="text-xl md:text-3xl font-black uppercase italic mb-2 md:mb-3 text-white group-hover:translate-x-2 transition-transform duration-300">
                        {service.title}
                      </h3>
-                     <div className={`text-[10px] md:text-xs font-black uppercase tracking-[0.2em] mb-6 ${service.color}`}>
+                     <div className={`text-[9px] md:text-xs font-black uppercase tracking-[0.2em] mb-4 md:mb-6 ${service.color}`}>
                        // {service.tagline}
                      </div>
-                     <p className="text-sm text-gray-400 leading-relaxed font-medium mb-8">
+                     <p className="text-xs md:text-sm text-gray-400 leading-relaxed font-medium mb-6 md:mb-8">
                        {service.desc}
                      </p>
                      
-                     <ul className="space-y-4 mb-8">
+                     <ul className="space-y-3 md:space-y-4 mb-8">
                        {service.features.map((feat, idx) => (
-                         <li key={idx} className="text-xs font-bold text-gray-500 flex items-start gap-3 uppercase tracking-wider">
-                           <ChevronRight className={`w-4 h-4 shrink-0 ${service.color}`} /> {feat}
+                         <li key={idx} className="text-[10px] md:text-xs font-bold text-gray-500 flex items-start gap-2 md:gap-3 uppercase tracking-wider">
+                           <ChevronRight className={`w-3 h-3 md:w-4 md:h-4 shrink-0 ${service.color}`} /> {feat}
                          </li>
                        ))}
                      </ul>
                   </div>
 
                   <div className="relative z-10 mt-auto">
-                    <div className="flex justify-between items-end border-t border-white/10 pt-8">
+                    <div className="flex justify-between items-end border-t border-white/10 pt-6 md:pt-8">
                        <div>
-                          <span className="text-xs text-red-500 line-through block font-black tracking-widest mb-1 opacity-70">
+                          <span className="text-[10px] md:text-xs text-red-500 line-through block font-black tracking-widest mb-1 opacity-70">
                             {service.originalPrice}
                           </span>
-                          <span className="text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                          <span className="text-3xl md:text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
                             {service.price}
                           </span>
                        </div>
                        <Link href="/login?next=/request">
-                          <button className="text-xs font-black uppercase bg-white text-black px-6 py-3 rounded-xl hover:bg-gray-300 transition-colors shadow-lg active:scale-95">
+                          <button className="text-[10px] md:text-xs font-black uppercase bg-white text-black px-4 md:px-6 py-2.5 md:py-3 rounded-xl hover:bg-gray-300 transition-colors shadow-lg active:scale-95">
                           Select
                           </button>
                        </Link>
@@ -599,27 +590,27 @@ export default function Home() {
         </section>
 
         {/* --- FLAGSHIP FOOTER --- */}
-        <footer className="bg-black py-24 px-6 md:px-12 lg:px-20 border-t border-white/10 relative z-20">
-          <div className="max-w-[1600px] mx-auto grid lg:grid-cols-2 gap-16 lg:gap-12">
+        <footer className="bg-black py-16 md:py-24 px-6 md:px-12 lg:px-20 border-t border-white/10 relative z-20">
+          <div className="max-w-[1600px] mx-auto grid lg:grid-cols-2 gap-12 lg:gap-12">
              <div>
-               <div className="flex items-center gap-4 mb-8">
-                 <img src="/logo.png" className="w-12 h-12 invert opacity-50" alt="logo" />
-                 <h4 className="text-3xl md:text-4xl font-black italic text-gray-300 tracking-tighter">SANDNCO.LOL</h4>
+               <div className="flex items-center gap-4 mb-6 md:mb-8">
+                 <img src="/logo.png" className="w-10 h-10 md:w-12 md:h-12 invert opacity-50" alt="logo" />
+                 <h4 className="text-2xl md:text-4xl font-black italic text-gray-300 tracking-tighter">SANDNCO.LOL</h4>
                </div>
-               <div className="space-y-3 text-xs md:text-sm font-black uppercase tracking-widest text-gray-600">
-                  <p className="flex items-center gap-3"><MapPin className="w-4 h-4 text-red-500"/> LOCATION: UNDISCLOSED (SECTOR 16)</p>
-                  <p className="flex items-center gap-3"><Activity className="w-4 h-4 text-red-500"/> STATUS: HUNTING</p>
-                  <p className="flex items-center gap-3"><Lock className="w-4 h-4 text-red-500"/> ENCRYPTED: YES (AES-256)</p>
+               <div className="space-y-3 text-[10px] md:text-sm font-black uppercase tracking-widest text-gray-600">
+                  <p className="flex items-center gap-3"><MapPin className="w-3 h-3 md:w-4 md:h-4 text-red-500"/> LOCATION: UNDISCLOSED (SECTOR 16)</p>
+                  <p className="flex items-center gap-3"><Activity className="w-3 h-3 md:w-4 md:h-4 text-red-500"/> STATUS: HUNTING</p>
+                  <p className="flex items-center gap-3"><Lock className="w-3 h-3 md:w-4 md:h-4 text-red-500"/> ENCRYPTED: YES (AES-256)</p>
                </div>
              </div>
              
              <div className="flex flex-col lg:items-end justify-between">
-               <div className="flex flex-wrap gap-6 md:gap-10 text-xs font-black uppercase tracking-[0.2em] text-gray-500 mb-12">
+               <div className="flex flex-wrap gap-4 md:gap-10 text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-gray-500 mb-8 md:mb-12">
                  <Link href="/legal" className="hover:text-red-500 transition-colors">Terms</Link>
                  <Link href="/legal" className="hover:text-red-500 transition-colors">Privacy</Link>
                  <a href="https://instagram.com" className="hover:text-red-500 transition-colors">Instagram</a>
                </div>
-               <p className="text-[10px] text-gray-700 max-w-md lg:text-right font-bold uppercase tracking-widest leading-relaxed border-t border-gray-900 pt-6">
+               <p className="text-[9px] md:text-[10px] text-gray-700 max-w-md lg:text-right font-bold uppercase tracking-widest leading-relaxed border-t border-gray-900 pt-6">
                  DISCLAIMER: We are an entertainment service. Any resemblance to real-life stalking, emotional manipulation, or actual black-ops is purely coincidental. Please do not sue us. We have no money.
                </p>
              </div>
@@ -627,8 +618,45 @@ export default function Home() {
         </footer>
       </main>
 
-      {/* A quick dummy icon for the footer */}
       <style jsx global>{`
+        /* Pure CSS 60FPS Marquees */
+        @keyframes marqueeLeft {
+          0% { transform: translate3d(0, 0, 0); }
+          100% { transform: translate3d(-50%, 0, 0); }
+        }
+        @keyframes marqueeRight {
+          0% { transform: translate3d(-50%, 0, 0); }
+          100% { transform: translate3d(0, 0, 0); }
+        }
+        .animate-marquee-left {
+          animation: marqueeLeft 15s linear infinite;
+          will-change: transform;
+        }
+        .animate-marquee-right {
+          animation: marqueeRight 15s linear infinite;
+          will-change: transform;
+        }
+
+        /* Violent Glitch Animations */
+        @keyframes glitch1 {
+          0% { transform: translate(0) }
+          20% { transform: translate(-3px, 3px) }
+          40% { transform: translate(-3px, -3px) }
+          60% { transform: translate(3px, 3px) }
+          80% { transform: translate(3px, -3px) }
+          100% { transform: translate(0) }
+        }
+        @keyframes glitch2 {
+          0% { transform: translate(0) }
+          20% { transform: translate(3px, -3px) }
+          40% { transform: translate(3px, 3px) }
+          60% { transform: translate(-3px, -3px) }
+          80% { transform: translate(-3px, 3px) }
+          100% { transform: translate(0) }
+        }
+        .animate-glitch-1 { animation: glitch1 0.2s infinite; }
+        .animate-glitch-2 { animation: glitch2 0.25s infinite; }
+
         @keyframes scan {
           0% { transform: translateY(-100%); }
           100% { transform: translateY(100%); }
@@ -636,12 +664,8 @@ export default function Home() {
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .will-change-transform { will-change: transform; transform: translateZ(0); }
       `}</style>
     </>
   );
-}
-
-// Dummy icon for footer
-function MapPin(props) {
-  return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
 }
