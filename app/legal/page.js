@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { 
   ShieldAlert, FileWarning, Scale, ArrowLeft, Lock, 
-  Database, BrainCircuit, Crosshair, Ghost, ScrollText
+  Database, Skull, BrainCircuit, Crosshair, Ghost, ScrollText
 } from "lucide-react";
 import Link from "next/link";
 import Head from "next/head";
