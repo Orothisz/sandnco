@@ -29,6 +29,7 @@ export default function MinderHub() {
   const [toastMessage, setToastMessage] = useState(null); // For non-blocking notifications
   const [stats, setStats] = useState({ mostSmashed: null, mostPassed: null }); // Leaderboard stats
   const [isSwipeInProgress, setIsSwipeInProgress] = useState(false); // Prevent rapid-fire swipes
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false); // Track if we've ever loaded data
 
   // Haptic feedback for mobile
   const triggerHaptic = useCallback((intensity = 'medium') => {
@@ -44,69 +45,68 @@ export default function MinderHub() {
 
   // 1. OPTIMIZED DATA INGESTION ENGINE
   const fetchTargets = useCallback(async (currentOffset = 0, currentSession = session) => {
+    console.log('🎯 fetchTargets called', { currentOffset, hasSession: !!currentSession });
     setFetchingMore(true);
-    const limit = 10; // Reduced from 15 for faster initial load
+    const limit = currentOffset === 0 ? 20 : 10; // Load 20 on first load, 10 after
     
     try {
-      let query = supabase
+      // Fetch all targets first - don't filter by swipes yet
+      const { data, error } = await supabase
         .from('minder_targets')
         .select('*')
         .order('created_at', { ascending: false })
         .range(currentOffset, currentOffset + limit - 1);
       
-      let swipedIds = [];
+      console.log('📦 Targets fetched', { count: data?.length, error: error?.message });
       
+      if (error) throw error;
+      
+      // Load user's swipes separately
+      let swipeMap = new Map();
       if (currentSession?.user?.id) {
         const { data: swiped } = await supabase
           .from('minder_swipes')
           .select('target_id, action')
           .eq('swiper_id', currentSession.user.id);
         
+        console.log('💾 Swipes loaded', { count: swiped?.length });
+        
         if (swiped && swiped.length > 0) {
-          // Store user's swipes in state for future reference
-          const swipeMap = new Map();
           swiped.forEach(s => swipeMap.set(s.target_id, s.action));
           setUserSwipes(swipeMap);
-          
-          swipedIds = swiped.map(s => s.target_id).filter(id => !!id);
         }
       }
-
-      const { data, error } = await query;
-      if (error) throw error;
       
       if (data && data.length > 0) {
         setTargets(prev => {
           const existingIds = new Set(prev.map(t => t.id));
           const newTargets = data.filter(t => !existingIds.has(t.id));
+          console.log('✅ Setting targets', { new: newTargets.length, total: newTargets.length + prev.length });
           return [...newTargets.reverse(), ...prev];
         });
         setPageOffset(currentOffset + limit);
+        setHasLoadedOnce(true);
         
-        // Optimized lazy image preloading - only top 3 cards, non-blocking
-        if (typeof requestIdleCallback !== 'undefined') {
-          requestIdleCallback(() => {
-            data.slice(0, 3).forEach(t => {
-              const img = new Image();
-              img.loading = 'lazy';
-              img.src = t.image_url;
-            });
-          }, { timeout: 2000 });
-        } else {
-          // Fallback for browsers without requestIdleCallback
-          setTimeout(() => {
-            data.slice(0, 3).forEach(t => {
-              const img = new Image();
-              img.src = t.image_url;
-            });
-          }, 100);
-        }
+        // Aggressive image preloading for instant display
+        data.forEach((t, index) => {
+          const img = new Image();
+          img.src = t.image_url;
+          // Prioritize first 5 images
+          if (index < 5) {
+            img.loading = 'eager';
+          }
+        });
+      } else if (currentOffset === 0) {
+        // Only mark as loaded if this was the initial load
+        console.log('⚠️ No targets found on initial load');
+        setHasLoadedOnce(true);
       }
     } catch (err) {
       console.error("🚨 CRITICAL_DB_SYNC_FAILURE:", err.message);
     } finally {
       setLoading(false);
       setFetchingMore(false);
+      console.log('🏁 Fetch complete');
     }
   }, [session, supabase]);
 
@@ -173,24 +173,30 @@ export default function MinderHub() {
       const { data: { session: activeSession } } = await supabase.auth.getSession();
       setSession(activeSession);
       
-      // Sequential execution - fetch targets first (priority), then feed and stats
-      await fetchTargets(0, activeSession);
-      fetchStats(); // Non-blocking stats fetch
+      // IMMEDIATE target fetch - this is priority #1
+      fetchTargets(0, activeSession);
       
-      // Fetch feed after targets are loaded (non-blocking)
-      supabase.from('minder_targets')
-        .select('id, alias')
-        .order('created_at', { ascending: false })
-        .limit(5) // Reduced from 10
-        .then(({ data }) => {
-          if (data) {
-            setFeed(data.map(t => ({
-              id: `hist-${t.id}`,
-              text: `> NEW TARGET LOGGED: [${t.alias}]`,
-              color: 'text-gray-500'
-            })));
-          }
-        });
+      // Feed fetch in background (non-blocking)
+      setTimeout(() => {
+        supabase.from('minder_targets')
+          .select('id, alias')
+          .order('created_at', { ascending: false })
+          .limit(5)
+          .then(({ data }) => {
+            if (data) {
+              setFeed(data.map(t => ({
+                id: `hist-${t.id}`,
+                text: `> NEW TARGET LOGGED: [${t.alias}]`,
+                color: 'text-gray-500'
+              })));
+            }
+          });
+      }, 500);
+      
+      // Stats fetch even later (non-blocking)
+      setTimeout(() => {
+        fetchStats();
+      }, 1000);
 
       // Realtime subscriptions - only if not on slow connection
       if (navigator.connection && navigator.connection.effectiveType !== '2g') {
@@ -277,8 +283,14 @@ export default function MinderHub() {
     setTargets(prev => {
       const newDeck = prev.slice(0, -1); // Remove last item (current card)
       
-      // INFINITE LOOP: Auto-fetch more when running low
-      if (newDeck.length < 5 && !fetchingMore) {
+      // INFINITE LOOP FIX: When we're down to last card, restart from beginning
+      if (newDeck.length === 0 && !fetchingMore) {
+        console.log('🔄 Deck empty - reloading from start');
+        // Reset offset and fetch from beginning
+        setPageOffset(0);
+        fetchTargets(0, session);
+      } else if (newDeck.length < 5 && !fetchingMore) {
+        // Normal case: fetch more when running low
         fetchTargets(pageOffset, session);
       }
       
@@ -477,7 +489,7 @@ export default function MinderHub() {
 
         {/* --- UNIFIED TARGET VIEWPORT --- */}
         <div className="flex-1 w-full flex items-center justify-center relative my-4 md:my-6 z-10 min-h-[450px] md:min-h-[500px]">
-          {loading ? (
+          {!hasLoadedOnce && loading ? (
             <div className="text-pink-500 flex flex-col items-center gap-10">
               <div className="relative scale-100 md:scale-125">
                 <Radar className="w-20 h-20 md:w-28 md:h-28 animate-spin opacity-40 text-pink-600" />
@@ -578,38 +590,40 @@ export default function MinderHub() {
 
       {/* --- LEADERBOARD STATS PANEL --- */}
       {(stats.mostSmashed || stats.mostPassed) && (
-        <div className="fixed bottom-24 md:bottom-auto md:top-10 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-[520px] z-[100] flex flex-row md:flex-col gap-3">
+        <div className="hidden md:flex fixed top-6 right-6 z-[90] flex-col gap-3 pointer-events-none">
           {stats.mostSmashed && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-gradient-to-br from-green-950/95 to-black/95 backdrop-blur-2xl border-2 border-green-500/40 rounded-xl md:rounded-2xl p-3 md:p-4 shadow-[0_0_40px_rgba(34,197,94,0.3)] min-w-[140px] md:min-w-[200px]"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-black/90 backdrop-blur-xl border border-green-500/30 rounded-xl px-4 py-3 shadow-[0_0_30px_rgba(34,197,94,0.2)] flex items-center gap-3 pointer-events-auto"
             >
-              <div className="flex md:flex-row flex-col items-center gap-2 md:gap-3">
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-cover bg-center border-2 border-green-400 shadow-lg flex-shrink-0" style={{ backgroundImage: `url(${stats.mostSmashed.image_url})` }} />
-                <div className="flex-1 text-center md:text-left">
-                  <div className="text-[7px] md:text-[8px] text-green-400 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mb-1">🔥 Top</div>
-                  <div className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostSmashed.alias}</div>
-                  <div className="text-[9px] md:text-[10px] text-green-300 font-bold">{stats.mostSmashed.count} 💚</div>
+              <div className="w-10 h-10 rounded-full bg-cover bg-center border-2 border-green-400 shadow-lg flex-shrink-0" style={{ backgroundImage: `url(${stats.mostSmashed.image_url})` }} />
+              <div className="flex-1">
+                <div className="text-[8px] text-green-400 font-black uppercase tracking-[0.2em] mb-0.5 flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  TOP SMASH
                 </div>
+                <div className="text-xs font-black text-white uppercase tracking-tight truncate max-w-[120px]">{stats.mostSmashed.alias}</div>
+                <div className="text-[9px] text-green-300 font-bold">{stats.mostSmashed.count} times</div>
               </div>
             </motion.div>
           )}
           
           {stats.mostPassed && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-gradient-to-br from-red-950/95 to-black/95 backdrop-blur-2xl border-2 border-red-500/40 rounded-xl md:rounded-2xl p-3 md:p-4 shadow-[0_0_40px_rgba(239,68,68,0.3)] min-w-[140px] md:min-w-[200px]"
+              className="bg-black/90 backdrop-blur-xl border border-red-500/30 rounded-xl px-4 py-3 shadow-[0_0_30px_rgba(239,68,68,0.2)] flex items-center gap-3 pointer-events-auto"
             >
-              <div className="flex md:flex-row flex-col items-center gap-2 md:gap-3">
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-cover bg-center border-2 border-red-400 shadow-lg flex-shrink-0" style={{ backgroundImage: `url(${stats.mostPassed.image_url})` }} />
-                <div className="flex-1 text-center md:text-left">
-                  <div className="text-[7px] md:text-[8px] text-red-400 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mb-1">❄️ Top</div>
-                  <div className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostPassed.alias}</div>
-                  <div className="text-[9px] md:text-[10px] text-red-300 font-bold">{stats.mostPassed.count} 💔</div>
+              <div className="w-10 h-10 rounded-full bg-cover bg-center border-2 border-red-400 shadow-lg flex-shrink-0" style={{ backgroundImage: `url(${stats.mostPassed.image_url})` }} />
+              <div className="flex-1">
+                <div className="text-[8px] text-red-400 font-black uppercase tracking-[0.2em] mb-0.5 flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  TOP PASS
                 </div>
+                <div className="text-xs font-black text-white uppercase tracking-tight truncate max-w-[120px]">{stats.mostPassed.alias}</div>
+                <div className="text-[9px] text-red-300 font-bold">{stats.mostPassed.count} times</div>
               </div>
             </motion.div>
           )}
