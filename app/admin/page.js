@@ -16,7 +16,7 @@ export default function AdminDashboard() {
   // ==========================================
   // GLOBAL STATE
   // ==========================================
-  const [activeTab, setActiveTab] = useState("MISSIONS"); // 'MISSIONS' or 'MINDER'
+  const [activeTab, setActiveTab] = useState("MISSIONS"); 
   const [adminLog, setAdminLog] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, active: 0, revenue: 0, pending: 0, grid_count: 0 });
@@ -36,7 +36,7 @@ export default function AdminDashboard() {
   const [minderTargets, setMinderTargets] = useState([]);
   const [gridFilter, setGridFilter] = useState("");
   const [injecting, setInjecting] = useState(false);
-  const [editingId, setEditingId] = useState(null); // Null = Insert, ID = Update
+  const [editingId, setEditingId] = useState(null); 
   
   const initialFormState = { alias: "", age: "", bio: "", instagram_id: "", file: null, preview: null, image_url: null };
   const [minderForm, setMinderForm] = useState(initialFormState);
@@ -45,13 +45,11 @@ export default function AdminDashboard() {
   // 1. DATA INGESTION
   // --------------------------------------------------------------------------
   const fetchIntel = async () => {
-    // 1. Fetch Missions
     const { data: reqData, error: reqError } = await supabase
       .from("requests")
       .select("*")
       .order("created_at", { ascending: false });
 
-    // 2. Fetch Minder Targets (For Grid Management)
     const { data: targetsData, error: targetError } = await supabase
       .from("minder_targets")
       .select("*")
@@ -62,9 +60,8 @@ export default function AdminDashboard() {
       setMinderTargets(targetsData || []);
       calculateStats(reqData || [], targetsData?.length || 0);
       
-      // Keep selected request updated if data changes
       if (selectedRequest) {
-        const updatedSelected = reqData.find(r => r.id === selectedRequest.id);
+        const updatedSelected = (reqData || []).find(r => r.id === selectedRequest.id);
         if (updatedSelected) setSelectedRequest(updatedSelected);
       }
     } else {
@@ -103,7 +100,7 @@ export default function AdminDashboard() {
     const pending = data.filter(r => r.status === 'PENDING').length;
     const revenue = data.reduce((acc, curr) => {
       let price = 0;
-      const type = curr.service_type?.toLowerCase() || '';
+      const type = String(curr.service_type || '').toLowerCase();
       if (type.includes('breakup')) price = 999;
       if (type.includes('patchup')) price = 1499;
       if (type.includes('matchup')) price = 1999;
@@ -131,7 +128,6 @@ export default function AdminDashboard() {
   const updateStatus = async (id, newStatus, e) => {
     if (e) e.stopPropagation();
     
-    // Optimistic UI
     setRequests(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
     if (selectedRequest?.id === id) setSelectedRequest(prev => ({ ...prev, status: newStatus }));
 
@@ -170,15 +166,15 @@ export default function AdminDashboard() {
   const initiateEdit = (target) => {
     setEditingId(target.id);
     setMinderForm({
-      alias: target.alias,
-      age: target.age.toString(),
-      bio: target.bio,
-      instagram_id: target.instagram_id,
+      alias: target.alias || "",
+      age: target.age ? target.age.toString() : "",
+      bio: target.bio || "",
+      instagram_id: target.instagram_id || "",
       file: null,
-      preview: target.image_url,
-      image_url: target.image_url
+      preview: target.image_url || "",
+      image_url: target.image_url || ""
     });
-    sysLog("SYS", `EDIT MODE LOCKED ON DOSSIER: ${target.alias}`);
+    sysLog("SYS", `EDIT MODE LOCKED ON DOSSIER: ${target.alias || "UNKNOWN"}`);
   };
 
   const cancelEdit = () => {
@@ -188,7 +184,7 @@ export default function AdminDashboard() {
   };
 
   const handlePurgeTarget = async (id, alias) => {
-    const confirm = window.confirm(`WARNING: PURGING DOSSIER [${alias}]. THIS IRREVERSIBLY ALTERS THE GRID. PROCEED?`);
+    const confirm = window.confirm(`WARNING: PURGING DOSSIER [${alias || "UNKNOWN"}]. THIS IRREVERSIBLY ALTERS THE GRID. PROCEED?`);
     if (!confirm) return;
 
     sysLog("CMD", `INITIATING PURGE SEQUENCE FOR ID: ${id}`);
@@ -197,7 +193,7 @@ export default function AdminDashboard() {
     if (error) {
       sysLog("ERR", `PURGE FAILED: ${error.message}`);
     } else {
-      sysLog("CMD", `DOSSIER [${alias}] PERMANENTLY PURGED FROM GRID.`);
+      sysLog("CMD", `DOSSIER [${alias || "UNKNOWN"}] PERMANENTLY PURGED FROM GRID.`);
       fetchIntel();
       if (editingId === id) cancelEdit();
     }
@@ -215,7 +211,6 @@ export default function AdminDashboard() {
     try {
       let finalImageUrl = minderForm.image_url;
 
-      // 1. Upload new image if provided
       if (minderForm.file) {
         const fileExt = minderForm.file.name.split('.').pop();
         const fileName = `admin-inject-${Date.now()}.${fileExt}`;
@@ -229,14 +224,13 @@ export default function AdminDashboard() {
 
       const payload = {
         alias: minderForm.alias,
-        age: parseInt(minderForm.age),
+        age: parseInt(minderForm.age) || 18,
         bio: minderForm.bio,
-        instagram_id: minderForm.instagram_id.replace('@', ''),
+        instagram_id: String(minderForm.instagram_id || '').replace('@', ''),
         image_url: finalImageUrl,
         entity_type: 'human'
       };
 
-      // 2. Insert or Update
       if (editingId) {
         const { error } = await supabase.from('minder_targets').update(payload).eq('id', editingId);
         if (error) throw error;
@@ -258,10 +252,16 @@ export default function AdminDashboard() {
   };
 
   // --------------------------------------------------------------------------
-  // RENDER HELPERS
+  // RENDER HELPERS (CRASH PROOFED)
   // --------------------------------------------------------------------------
   const filteredRequests = requests.filter(r => filter === "ALL" || r.status === filter);
-  const searchedTargets = minderTargets.filter(t => t.alias.toLowerCase().includes(gridFilter.toLowerCase()) || t.instagram_id.toLowerCase().includes(gridFilter.toLowerCase()));
+  
+  const searchedTargets = minderTargets.filter(t => {
+    const q = gridFilter.toLowerCase();
+    const aliasMatch = String(t.alias || "").toLowerCase().includes(q);
+    const instaMatch = String(t.instagram_id || "").toLowerCase().includes(q);
+    return aliasMatch || instaMatch;
+  });
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#ededed] font-mono selection:bg-emerald-900 selection:text-white flex flex-col">
@@ -345,13 +345,13 @@ export default function AdminDashboard() {
                       >
                         <td className="p-4"><StatusIndicator status={req.status} /></td>
                         <td className="p-4 font-mono text-gray-500">
-                          <span className="text-gray-300">#{req.id.split('-')[0]}</span><br/>
-                          <span className="text-[8px] opacity-50">{new Date(req.created_at).toLocaleDateString()}</span>
+                          <span className="text-gray-300">#{String(req.id).split('-')[0]}</span><br/>
+                          <span className="text-[8px] opacity-50">{String(req.created_at || "").split('T')[0]}</span>
                         </td>
-                        <td className="p-4 text-gray-400 truncate max-w-[120px]">{req.user_email?.split('@')[0] || "Unknown"}</td>
+                        <td className="p-4 text-gray-400 truncate max-w-[120px]">{(req.user_email || "").split('@')[0] || "Unknown"}</td>
                         <td className="p-4">
-                          <div className="text-gray-200 uppercase font-bold truncate max-w-[150px]">{req.target_name}</div>
-                          <div className="text-[9px] text-gray-600 uppercase mt-0.5">{req.service_type}</div>
+                          <div className="text-gray-200 uppercase font-bold truncate max-w-[150px]">{req.target_name || "UNKNOWN"}</div>
+                          <div className="text-[9px] text-gray-600 uppercase mt-0.5">{req.service_type || "UNKNOWN"}</div>
                         </td>
                         <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
@@ -379,9 +379,9 @@ export default function AdminDashboard() {
                   <div className="p-5 border-b border-white/10 flex justify-between items-start bg-[#0a0a0a]">
                     <div>
                        <h2 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
-                         <FileText className="w-4 h-4 text-gray-500" /> DOSSIER #{selectedRequest.id.split('-')[0]}
+                         <FileText className="w-4 h-4 text-gray-500" /> DOSSIER #{String(selectedRequest.id).split('-')[0]}
                        </h2>
-                       <p className="text-[9px] text-gray-500 mt-1 uppercase tracking-widest">{selectedRequest.service_type}</p>
+                       <p className="text-[9px] text-gray-500 mt-1 uppercase tracking-widest">{selectedRequest.service_type || "UNKNOWN"}</p>
                     </div>
                     <button onClick={() => setSelectedRequest(null)} className="text-gray-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
                   </div>
@@ -428,7 +428,7 @@ export default function AdminDashboard() {
                        <div className="space-y-4">
                           <div>
                             <span className="text-[9px] text-gray-600 block tracking-widest uppercase">Target Name</span>
-                            <span className="text-sm text-gray-200 font-bold tracking-wider">{selectedRequest.target_name}</span>
+                            <span className="text-sm text-gray-200 font-bold tracking-wider">{selectedRequest.target_name || "UNKNOWN"}</span>
                           </div>
                           <div>
                             <span className="text-[9px] text-gray-600 block tracking-widest uppercase mb-1">Briefing Notes</span>
@@ -458,7 +458,7 @@ export default function AdminDashboard() {
                 <h2 className="text-xs font-black text-white uppercase tracking-[0.2em]">GRID DATABASE</h2>
                 <div className="ml-auto relative flex items-center">
                   <Search className="w-3 h-3 absolute left-3 text-gray-600" />
-                  <input type="text" value={gridFilter} onChange={e => setGridFilter(e.target.value)} placeholder="Search alias or ID..." className="bg-white/5 border border-white/10 py-1.5 pl-8 pr-3 text-[10px] text-white focus:outline-none focus:border-pink-500/50 w-48 transition-all placeholder:text-gray-700" />
+                  <input type="text" value={gridFilter} onChange={e => setGridFilter(e.target.value)} placeholder="Search alias..." className="bg-white/5 border border-white/10 py-1.5 pl-8 pr-3 text-[10px] text-white focus:outline-none focus:border-pink-500/50 w-48 transition-all placeholder:text-gray-700" />
                 </div>
               </div>
 
@@ -469,11 +469,11 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-4">
                         <img src={target.image_url} className="w-12 h-12 rounded-full object-cover border border-white/20 grayscale group-hover:grayscale-0 transition-all" alt="Target" />
                         <div className="flex-1 min-w-0">
-                           <h3 className="text-sm font-black text-gray-200 uppercase truncate">{target.alias} <span className="text-gray-600 text-xs font-normal">{target.age}</span></h3>
-                           <p className="text-[9px] text-pink-500 tracking-widest font-bold truncate">@{target.instagram_id}</p>
+                           <h3 className="text-sm font-black text-gray-200 uppercase truncate">{target.alias || "UNKNOWN"} <span className="text-gray-600 text-xs font-normal">{target.age || "?"}</span></h3>
+                           <p className="text-[9px] text-pink-500 tracking-widest font-bold truncate">@{target.instagram_id || "unknown"}</p>
                         </div>
                       </div>
-                      <p className="text-[10px] text-gray-500 line-clamp-2 italic">"{target.bio}"</p>
+                      <p className="text-[10px] text-gray-500 line-clamp-2 italic">"{target.bio || "No intel available."}"</p>
                       <div className="mt-auto pt-3 border-t border-white/5 flex justify-end gap-2">
                         <button onClick={() => initiateEdit(target)} className="text-gray-500 hover:text-white text-[9px] font-bold tracking-widest flex items-center gap-1 uppercase p-1"><Edit2 className="w-3 h-3"/> Edit</button>
                         <button onClick={() => handlePurgeTarget(target.id, target.alias)} className="text-gray-600 hover:text-red-500 text-[9px] font-bold tracking-widest flex items-center gap-1 uppercase p-1"><Trash2 className="w-3 h-3"/> Purge</button>
