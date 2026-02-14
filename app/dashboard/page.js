@@ -20,13 +20,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [requests, setRequests] = useState([]);
-  const [minderProfile, setMinderProfile] = useState(null);
+  
+  // Changed from singular object to Array
+  const [minderProfiles, setMinderProfiles] = useState([]);
+  
   const [greeting, setGreeting] = useState("INITIALIZING...");
   const [activeTab, setActiveTab] = useState("MISSIONS"); 
-  const [purging, setPurging] = useState(false);
+  const [purgingId, setPurgingId] = useState(null); // Track which ID is being purged
 
   // --- EDIT DOSSIER STATE ---
   const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [editForm, setEditForm] = useState({ alias: "", age: "", bio: "", instagram_id: "", file: null, preview: null });
 
@@ -57,14 +61,15 @@ export default function Dashboard() {
   const fetchIntel = useCallback(async (sessionUser) => {
     const [reqRes, minderRes] = await Promise.all([
       supabase.from("requests").select("*").eq("user_id", sessionUser.id).order("created_at", { ascending: false }),
-      supabase.from("minder_targets").select("*").eq("user_id", sessionUser.id).limit(1).maybeSingle()
+      // Removed .limit(1).maybeSingle() to fetch ALL profiles
+      supabase.from("minder_targets").select("*").eq("user_id", sessionUser.id).order("created_at", { ascending: false })
     ]);
 
     if (reqRes.error) console.error("Error fetching missions:", reqRes.error);
     else setRequests(reqRes.data || []);
 
-    if (minderRes.error && minderRes.error.code !== 'PGRST116') console.error("Error fetching minder:", minderRes.error);
-    else setMinderProfile(minderRes.data || null);
+    if (minderRes.error) console.error("Error fetching minder:", minderRes.error);
+    else setMinderProfiles(minderRes.data || []);
 
     setLoading(false);
   }, [supabase]);
@@ -84,37 +89,55 @@ export default function Dashboard() {
     initData();
   }, [router, supabase, fetchIntel]);
 
+  // --- REALTIME SUBSCRIPTION ---
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('user-missions-feed')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'requests', filter: `user_id=eq.${user.id}` }, (payload) => {
+          playNotificationSound();
+          setRequests((current) => current.map((req) => (req.id === payload.new.id ? payload.new : req)));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'minder_targets', filter: `user_id=eq.${user.id}` }, () => {
+          fetchIntel(user);
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [user, supabase, playNotificationSound, fetchIntel]);
+
   // --- ACTIONS ---
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/");
   };
 
-  const handlePurgeMinder = async () => {
-    if (!minderProfile) return;
+  const handlePurgeMinder = async (id) => {
     const confirm = window.confirm("WARNING: PURGING DOSSIER IS IRREVERSIBLE. YOU WILL BE REMOVED FROM THE GRID. PROCEED?");
     if (!confirm) return;
 
-    setPurging(true);
-    const { error } = await supabase.from('minder_targets').delete().eq('id', minderProfile.id);
+    setPurgingId(id);
+    const { error } = await supabase.from('minder_targets').delete().eq('id', id);
     if (!error) {
-      setMinderProfile(null);
+      setMinderProfiles(prev => prev.filter(p => p.id !== id));
       setIsEditing(false);
       playNotificationSound();
     }
-    setPurging(false);
+    setPurgingId(null);
   };
 
   // --- EDIT DOSSIER LOGIC ---
-  const startEdit = () => {
+  const startEdit = (profile) => {
     setEditForm({
-      alias: minderProfile.alias || "",
-      age: minderProfile.age || "",
-      bio: minderProfile.bio || "",
-      instagram_id: minderProfile.instagram_id || "",
+      alias: profile.alias || "",
+      age: profile.age ? profile.age.toString() : "",
+      bio: profile.bio || "",
+      instagram_id: profile.instagram_id || "",
       file: null,
-      preview: minderProfile.image_url || null
+      preview: profile.image_url || null
     });
+    setEditingId(profile.id);
     setIsEditing(true);
   };
 
@@ -130,7 +153,7 @@ export default function Dashboard() {
     setUpdating(true);
 
     try {
-      let finalImageUrl = minderProfile.image_url;
+      let finalImageUrl = editForm.preview; // Default to existing URL
 
       if (editForm.file) {
         const fileExt = editForm.file.name.split('.').pop();
@@ -149,11 +172,12 @@ export default function Dashboard() {
         image_url: finalImageUrl
       };
 
-      const { error } = await supabase.from('minder_targets').update(payload).eq('id', minderProfile.id);
+      const { error } = await supabase.from('minder_targets').update(payload).eq('id', editingId);
       if (error) throw error;
 
       await fetchIntel(user);
       setIsEditing(false);
+      setEditingId(null);
       playNotificationSound();
     } catch (err) {
       console.error("Update failed:", err);
@@ -186,6 +210,16 @@ export default function Dashboard() {
     if (t.includes('patchup')) return <Heart className="w-5 h-5 text-blue-500"/>;
     if (t.includes('matchup')) return <Search className="w-5 h-5 text-emerald-500"/>;
     return <Lock className="w-5 h-5 text-purple-500"/>;
+  };
+
+  // --- ANIMATION VARIANTS ---
+  const containerVars = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+  const itemVars = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
   };
 
   if (loading) {
@@ -263,7 +297,7 @@ export default function Dashboard() {
              onClick={() => setActiveTab("MINDER")}
              className={`px-8 py-3 text-[10px] md:text-xs font-black tracking-widest uppercase transition-all flex items-center gap-3 rounded-full border ${activeTab === 'MINDER' ? 'bg-pink-600 text-white border-pink-500 shadow-[0_0_20px_rgba(219,39,119,0.4)]' : 'bg-[#0a0a0a] text-pink-500/50 border-pink-500/20 hover:border-pink-500/50 hover:text-pink-400'}`}
            >
-             <Crosshair className="w-4 h-4" /> MINDER DOSSIER
+             <Crosshair className="w-4 h-4" /> MINDER DOSSIERS
            </button>
         </div>
 
@@ -271,18 +305,18 @@ export default function Dashboard() {
         {/* TAB 1: MISSIONS */}
         {/* ========================================================= */}
         {activeTab === "MISSIONS" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+          <motion.div variants={containerVars} initial="hidden" animate="show" className="space-y-6">
             
             {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 font-mono">
+            <motion.div variants={itemVars} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 font-mono">
                <StatBox label="Total Dossiers" value={requests.length} color="text-white" />
                <StatBox label="Field Active" value={requests.filter(r => r.status === 'ACTIVE').length} color="text-emerald-400" />
                <StatBox label="Reviewing" value={requests.filter(r => r.status === 'PENDING').length} color="text-amber-400" />
                <StatBox label="Completed" value={requests.filter(r => r.status === 'COMPLETED').length} color="text-blue-400" />
-            </div>
+            </motion.div>
 
             {requests.length === 0 ? (
-              <div className="text-center py-32 border border-dashed border-white/10 rounded-3xl bg-[#0a0a0a]/50 backdrop-blur-md">
+              <motion.div variants={itemVars} className="text-center py-32 border border-dashed border-white/10 rounded-3xl bg-[#0a0a0a]/50 backdrop-blur-md">
                  <Shield className="w-16 h-16 text-gray-700 mx-auto mb-6 opacity-50"/>
                  <h3 className="text-2xl font-black text-gray-400 uppercase tracking-widest mb-3">No Active Operations</h3>
                  <p className="text-xs font-mono text-gray-600 mb-8 max-w-sm mx-auto">Establish mission parameters to begin surveillance and field operations.</p>
@@ -291,15 +325,15 @@ export default function Dashboard() {
                      START FIRST MISSION &rarr;
                    </button>
                  </Link>
-              </div>
+              </motion.div>
             ) : (
               <div className="space-y-4">
-                {requests.map((req, i) => {
+                {requests.map((req) => {
                   const badge = getStatusBadge(req.status);
                   return (
                     <motion.div 
+                      variants={itemVars}
                       key={req.id}
-                      initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                       className="group bg-[#0a0a0a] border border-white/10 p-6 md:p-8 rounded-2xl hover:border-white/30 transition-all relative overflow-hidden shadow-lg"
                     >
                       <div className={`absolute left-0 top-0 bottom-0 w-1 ${badge.color.replace('text-', 'bg-')}`} />
@@ -366,20 +400,18 @@ export default function Dashboard() {
         )}
 
         {/* ========================================================= */}
-        {/* TAB 2: MINDER DOSSIER */}
+        {/* TAB 2: MINDER DOSSIERS */}
         {/* ========================================================= */}
         {activeTab === "MINDER" && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-center">
-             {!minderProfile ? (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center w-full">
+             
+             {minderProfiles.length === 0 ? (
                <div className="text-center p-12 md:p-20 border border-pink-500/20 bg-[#0a0a0f] rounded-[3rem] max-w-2xl w-full shadow-[0_0_50px_rgba(219,39,119,0.1)] relative overflow-hidden">
                   <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none" />
                   <Crosshair className="w-16 h-16 text-pink-600 mx-auto mb-6 opacity-80" />
-                  <h3 className="text-3xl font-black uppercase text-white mb-3 tracking-tighter">NO DOSSIER FOUND</h3>
-                  <p className="text-xs text-gray-400 mb-6 tracking-widest uppercase font-bold leading-relaxed max-w-sm mx-auto">
+                  <h3 className="text-3xl font-black uppercase text-white mb-3 tracking-tighter">NO DOSSIERS FOUND</h3>
+                  <p className="text-xs text-gray-400 mb-10 tracking-widest uppercase font-bold leading-relaxed max-w-sm mx-auto">
                     You are currently a ghost on the Minder Grid. Inject your dossier to become an active target.
-                  </p>
-                  <p className="text-[9px] text-pink-500/70 mb-10 tracking-widest uppercase font-mono bg-pink-900/10 border border-pink-500/20 p-3 rounded inline-block">
-                    Note: If you already injected a dossier but see this message, the database could not link it to your current authenticated session.
                   </p>
                   <Link href="/minder/enroll">
                     <button className="bg-pink-600 text-white font-black text-xs uppercase px-10 py-5 tracking-[0.3em] hover:bg-pink-500 transition-all shadow-[0_0_40px_rgba(219,39,119,0.4)] rounded-full hover:scale-105 active:scale-95 flex items-center justify-center gap-3 mx-auto">
@@ -457,59 +489,79 @@ export default function Dashboard() {
                  </form>
                </div>
              ) : (
-               /* --- VIEW DOSSIER STATE --- */
-               <div className="flex flex-col md:flex-row gap-10 items-center md:items-start max-w-4xl w-full">
+               /* --- VIEW DOSSIERS LIST --- */
+               <div className="w-full flex flex-col gap-12">
                  
-                 {/* ID CARD REPLICA */}
-                 <div className="w-full max-w-[320px] aspect-[3/4] rounded-[2.5rem] bg-black border-2 border-pink-500/50 relative overflow-hidden shadow-[0_0_60px_rgba(219,39,119,0.2)] group shrink-0">
-                    <img src={minderProfile.image_url} className="w-full h-full object-cover" alt="Profile" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent pointer-events-none" />
-                    <div className="absolute top-6 left-0 w-full bg-pink-600 text-white py-2 font-black text-center tracking-[0.4em] text-[9px] uppercase z-30 shadow-lg flex items-center justify-center gap-2">
-                      <Database className="w-3 h-3" /> ACTIVE GRID TARGET
-                    </div>
-                    
-                    <div className="absolute bottom-0 w-full p-6 bg-gradient-to-t from-black to-transparent z-20">
-                       <h2 className="text-3xl font-black uppercase text-white tracking-tighter drop-shadow-lg flex items-center gap-2 truncate">
-                         {minderProfile.alias} <span className="text-lg text-gray-400 font-normal">{minderProfile.age}</span>
-                       </h2>
-                       <div className="text-[10px] font-black text-white bg-pink-900/80 w-fit px-3 py-1.5 mt-2 rounded border border-pink-500/50 flex items-center gap-2">
-                         <Terminal className="w-3 h-3 text-pink-400" /> @{minderProfile.instagram_id}
-                       </div>
-                       <p className="text-xs text-gray-300 mt-4 font-medium leading-relaxed italic bg-black/60 p-3 rounded-xl border border-white/10 backdrop-blur-md line-clamp-3">
-                         "{minderProfile.bio}"
-                       </p>
-                    </div>
+                 {/* Top Action Bar */}
+                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-6">
+                   <div>
+                     <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+                       <Database className="w-5 h-5 text-pink-500" /> ACTIVE GRID DOSSIERS
+                     </h3>
+                     <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest">You currently have {minderProfiles.length} dossiers deployed.</p>
+                   </div>
+                   <Link href="/minder/enroll">
+                     <button className="bg-pink-600/20 text-pink-500 hover:bg-pink-600 hover:text-white border border-pink-500/50 text-[10px] font-black uppercase px-6 py-3 tracking-[0.2em] transition-all rounded-xl flex items-center gap-2">
+                       <Zap className="w-3 h-3" /> INJECT ANOTHER DOSSIER
+                     </button>
+                   </Link>
                  </div>
 
-                 {/* MANAGEMENT CONTROLS */}
-                 <div className="flex-1 w-full space-y-6">
-                    <div className="bg-[#0a0a0f] border border-white/10 p-8 rounded-3xl relative overflow-hidden">
-                       <h3 className="text-xl font-black text-white uppercase tracking-widest mb-2 flex items-center gap-3">
-                         <Shield className="w-5 h-5 text-gray-500" /> DOSSIER MANAGEMENT
-                       </h3>
-                       <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-8">Current Status: Visible on Grid</p>
+                 {/* Map Over All Profiles */}
+                 <div className="grid grid-cols-1 gap-10 w-full">
+                   {minderProfiles.map((profile) => (
+                     <div key={profile.id} className="flex flex-col md:flex-row gap-10 items-center md:items-start bg-[#0a0a0f] border border-white/10 p-8 md:p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
                        
-                       <div className="space-y-4">
-                         <button onClick={startEdit} className="w-full bg-white/5 border border-white/10 text-white font-black text-xs uppercase px-6 py-4 tracking-[0.2em] hover:bg-white/10 transition-all rounded-xl flex items-center justify-center gap-3 active:scale-95">
-                           <Edit2 className="w-4 h-4 text-pink-500" /> EDIT DOSSIER INTEL
-                         </button>
-                         <button 
-                           onClick={handlePurgeMinder}
-                           disabled={purging}
-                           className="w-full bg-red-950/30 border border-red-500/50 text-red-500 font-black text-xs uppercase px-6 py-4 tracking-[0.2em] hover:bg-red-900/50 transition-all rounded-xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
-                         >
-                           {purging ? <Activity className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} 
-                           {purging ? 'PURGING...' : 'PURGE DOSSIER PERMANENTLY'}
-                         </button>
-                       </div>
-                    </div>
+                       <div className="absolute top-0 right-0 w-64 h-64 bg-pink-500/5 blur-[100px] pointer-events-none" />
 
-                    <div className="bg-pink-950/20 border border-pink-500/20 p-6 rounded-2xl">
-                      <p className="text-[10px] text-pink-400 font-mono uppercase tracking-widest leading-relaxed flex items-start gap-3">
-                        <Flame className="w-4 h-4 shrink-0 mt-0.5" />
-                        By maintaining this dossier, you consent to the Smash/Pass doctrine. Your profile is currently being rendered to other operatives globally.
-                      </p>
-                    </div>
+                       {/* ID CARD REPLICA */}
+                       <div className="w-full max-w-[300px] aspect-[3/4] rounded-[2rem] bg-black border-2 border-pink-500/30 relative overflow-hidden shadow-2xl group shrink-0">
+                          <img src={profile.image_url} className="w-full h-full object-cover" alt="Profile" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent pointer-events-none" />
+                          
+                          <div className="absolute bottom-0 w-full p-6 bg-gradient-to-t from-black to-transparent z-20">
+                             <h2 className="text-2xl font-black uppercase text-white tracking-tighter drop-shadow-lg flex items-center gap-2 truncate">
+                               {profile.alias} <span className="text-lg text-gray-400 font-normal">{profile.age}</span>
+                             </h2>
+                             <div className="text-[10px] font-black text-white bg-pink-900/80 w-fit px-3 py-1.5 mt-2 rounded border border-pink-500/50 flex items-center gap-2">
+                               <Terminal className="w-3 h-3 text-pink-400" /> @{profile.instagram_id}
+                             </div>
+                             <p className="text-xs text-gray-300 mt-4 font-medium leading-relaxed italic bg-black/60 p-3 rounded-xl border border-white/10 backdrop-blur-md line-clamp-3">
+                               "{profile.bio}"
+                             </p>
+                          </div>
+                       </div>
+
+                       {/* MANAGEMENT CONTROLS */}
+                       <div className="flex-1 w-full flex flex-col justify-center">
+                          <h3 className="text-xl font-black text-white uppercase tracking-widest mb-2 flex items-center gap-3">
+                            <Shield className="w-5 h-5 text-gray-500" /> DOSSIER #{String(profile.id).split('-')[0]}
+                          </h3>
+                          <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-8">Deployed: {new Date(profile.created_at).toLocaleDateString()}</p>
+                          
+                          <div className="space-y-4">
+                            <button onClick={() => startEdit(profile)} className="w-full bg-white/5 border border-white/10 text-white font-black text-xs uppercase px-6 py-4 tracking-[0.2em] hover:bg-white/10 transition-all rounded-xl flex items-center justify-center gap-3 active:scale-95">
+                              <Edit2 className="w-4 h-4 text-pink-500" /> EDIT DOSSIER INTEL
+                            </button>
+                            <button 
+                              onClick={() => handlePurgeMinder(profile.id)}
+                              disabled={purgingId === profile.id}
+                              className="w-full bg-red-950/30 border border-red-500/50 text-red-500 font-black text-xs uppercase px-6 py-4 tracking-[0.2em] hover:bg-red-900/50 transition-all rounded-xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                            >
+                              {purgingId === profile.id ? <Activity className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} 
+                              {purgingId === profile.id ? 'PURGING...' : 'PURGE DOSSIER PERMANENTLY'}
+                            </button>
+                          </div>
+
+                          <div className="bg-pink-950/20 border border-pink-500/20 p-5 rounded-2xl mt-8">
+                            <p className="text-[10px] text-pink-400 font-mono uppercase tracking-widest leading-relaxed flex items-start gap-3">
+                              <Flame className="w-4 h-4 shrink-0 mt-0.5" />
+                              By maintaining this dossier, you consent to the Smash/Pass doctrine. Your profile is currently being rendered to other operatives globally.
+                            </p>
+                          </div>
+                       </div>
+                     </div>
+                   ))}
                  </div>
 
                </div>
