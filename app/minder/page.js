@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
-// THE FLAGSHIP ENGINE (v14.1 - RESPONSIVE PC HEADER FIX)
+// THE FLAGSHIP ENGINE (v14.2 - PC HEADER GEOMETRY FIX)
 // ============================================================================
 export default function MinderHub() {
   const supabase = createClientComponentClient();
@@ -290,15 +290,16 @@ export default function MinderHub() {
       {/* -------------------------------------------------------------------------- */}
       {/* THE MAIN VIRTUALIZED GRID */}
       {/* -------------------------------------------------------------------------- */}
-      <div className="flex-1 flex flex-col relative z-10 p-0 md:p-10 h-full overflow-hidden justify-center items-center pt-28 md:pt-24">
+      {/* FIXED: Increased pt-32 to push cards further down so they clear the absolute header */}
+      <div className="flex-1 flex flex-col relative z-10 p-0 md:p-10 h-full overflow-hidden justify-center items-center pt-28 md:pt-32">
         
         {/* ====================================================================== */}
-        {/* RESTRUCTURED DESKTOP HEADER (GRID LAYOUT FIX)                          */}
+        {/* RESTRUCTURED DESKTOP HEADER (ABSOLUTE CENTER FIX)                      */}
         {/* ====================================================================== */}
-        <div className="hidden md:grid grid-cols-[1fr_auto_1fr] items-start w-full absolute top-10 px-6 lg:px-10 z-[200] pointer-events-none">
+        <div className="hidden md:flex justify-between items-start w-full absolute top-8 px-8 lg:px-12 z-[200] pointer-events-none">
            
            {/* Left Config */}
-           <div className="flex flex-col gap-3 items-start pointer-events-auto justify-self-start">
+           <div className="flex flex-col gap-3 items-start pointer-events-auto">
              <Link href="/" className="group flex items-center gap-2 lg:gap-3 text-[10px] lg:text-xs font-black text-gray-400 hover:text-white transition-all uppercase tracking-widest bg-white/5 px-4 lg:px-6 py-3 rounded-full border border-white/10 backdrop-blur-md shadow-xl">
                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> BACK TO BASE
              </Link>
@@ -310,8 +311,8 @@ export default function MinderHub() {
              </Link>
            </div>
            
-           {/* Center Logo */}
-           <div className="flex flex-col items-center justify-self-center mt-[-5px]">
+           {/* Center Logo - Absolutely positioned to prevent squishing */}
+           <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center mt-[-5px]">
              <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black italic tracking-tighter text-white drop-shadow-[0_0_30px_rgba(219,39,119,0.5)] leading-none">
                MINDER<span className="text-pink-600">_</span>
              </h1>
@@ -321,7 +322,7 @@ export default function MinderHub() {
            </div>
 
            {/* Right Action */}
-           <div className="flex flex-col items-end pointer-events-auto justify-self-end">
+           <div className="flex flex-col items-end pointer-events-auto">
              <Link href="/minder/enroll">
                <button className="bg-pink-600 text-white text-[9px] lg:text-[10px] xl:text-xs font-black tracking-widest uppercase hover:bg-pink-500 transition-all shadow-[0_0_40px_rgba(219,39,119,0.4)] flex items-center justify-center gap-2 lg:gap-3 px-5 lg:px-8 py-3 lg:py-4 rounded-full border border-pink-400 active:scale-95">
                  <Zap className="w-4 h-4 fill-current" /> INJECT DOSSIER
