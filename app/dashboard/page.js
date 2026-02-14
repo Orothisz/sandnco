@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -8,21 +8,27 @@ import {
   Terminal, LogOut, Plus, Activity, Clock, 
   CheckCircle, XCircle, AlertTriangle, Search, 
   HeartCrack, Heart, Lock, ChevronRight, User, Shield,
-  Database, Crosshair, Zap, Trash2, Flame
+  Database, Crosshair, Zap, Trash2, Flame, Edit2, Upload, Save, X
 } from "lucide-react";
 import Link from "next/link";
 
 export default function Dashboard() {
   const router = useRouter();
   const supabase = createClientComponentClient();
+  const fileInputRef = useRef(null);
   
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [requests, setRequests] = useState([]);
   const [minderProfile, setMinderProfile] = useState(null);
   const [greeting, setGreeting] = useState("INITIALIZING...");
-  const [activeTab, setActiveTab] = useState("MISSIONS"); // 'MISSIONS' or 'MINDER'
+  const [activeTab, setActiveTab] = useState("MISSIONS"); 
   const [purging, setPurging] = useState(false);
+
+  // --- EDIT DOSSIER STATE ---
+  const [isEditing, setIsEditing] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [editForm, setEditForm] = useState({ alias: "", age: "", bio: "", instagram_id: "", file: null, preview: null });
 
   // --- AUDIO NOTIFICATION LOGIC ---
   const playNotificationSound = useCallback(() => {
@@ -43,7 +49,7 @@ export default function Dashboard() {
       oscillator.start();
       oscillator.stop(audioCtx.currentTime + 0.1);
     } catch (e) {
-      console.warn("Audio blocked by browser policy until user interaction.");
+      console.warn("Audio blocked by browser policy.");
     }
   }, []);
 
@@ -51,7 +57,7 @@ export default function Dashboard() {
   const fetchIntel = useCallback(async (sessionUser) => {
     const [reqRes, minderRes] = await Promise.all([
       supabase.from("requests").select("*").eq("user_id", sessionUser.id).order("created_at", { ascending: false }),
-      supabase.from("minder_targets").select("*").eq("user_id", sessionUser.id).maybeSingle()
+      supabase.from("minder_targets").select("*").eq("user_id", sessionUser.id).limit(1).maybeSingle()
     ]);
 
     if (reqRes.error) console.error("Error fetching missions:", reqRes.error);
@@ -78,24 +84,6 @@ export default function Dashboard() {
     initData();
   }, [router, supabase, fetchIntel]);
 
-  // --- REALTIME SUBSCRIPTION ---
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel('user-missions-feed')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'requests', filter: `user_id=eq.${user.id}` }, (payload) => {
-          playNotificationSound();
-          setRequests((current) => current.map((req) => (req.id === payload.new.id ? payload.new : req)));
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'minder_targets', filter: `user_id=eq.${user.id}` }, () => {
-          fetchIntel(user);
-      })
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [user, supabase, playNotificationSound, fetchIntel]);
-
   // --- ACTIONS ---
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -111,9 +99,67 @@ export default function Dashboard() {
     const { error } = await supabase.from('minder_targets').delete().eq('id', minderProfile.id);
     if (!error) {
       setMinderProfile(null);
+      setIsEditing(false);
       playNotificationSound();
     }
     setPurging(false);
+  };
+
+  // --- EDIT DOSSIER LOGIC ---
+  const startEdit = () => {
+    setEditForm({
+      alias: minderProfile.alias || "",
+      age: minderProfile.age || "",
+      bio: minderProfile.bio || "",
+      instagram_id: minderProfile.instagram_id || "",
+      file: null,
+      preview: minderProfile.image_url || null
+    });
+    setIsEditing(true);
+  };
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setEditForm({ ...editForm, file, preview: URL.createObjectURL(file) });
+    }
+  };
+
+  const handleUpdateDossier = async (e) => {
+    e.preventDefault();
+    setUpdating(true);
+
+    try {
+      let finalImageUrl = minderProfile.image_url;
+
+      if (editForm.file) {
+        const fileExt = editForm.file.name.split('.').pop();
+        const fileName = `user-update-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('minder_assets').upload(fileName, editForm.file);
+        if (uploadError) throw uploadError;
+        const { data: publicUrlData } = supabase.storage.from('minder_assets').getPublicUrl(fileName);
+        finalImageUrl = publicUrlData.publicUrl;
+      }
+
+      const payload = {
+        alias: editForm.alias,
+        age: parseInt(editForm.age) || 18,
+        bio: editForm.bio,
+        instagram_id: String(editForm.instagram_id).replace('@', ''),
+        image_url: finalImageUrl
+      };
+
+      const { error } = await supabase.from('minder_targets').update(payload).eq('id', minderProfile.id);
+      if (error) throw error;
+
+      await fetchIntel(user);
+      setIsEditing(false);
+      playNotificationSound();
+    } catch (err) {
+      console.error("Update failed:", err);
+      alert("Failed to update dossier. Check your uplink.");
+    }
+    setUpdating(false);
   };
 
   // --- HELPERS ---
@@ -140,16 +186,6 @@ export default function Dashboard() {
     if (t.includes('patchup')) return <Heart className="w-5 h-5 text-blue-500"/>;
     if (t.includes('matchup')) return <Search className="w-5 h-5 text-emerald-500"/>;
     return <Lock className="w-5 h-5 text-purple-500"/>;
-  };
-
-  // --- ANIMATION VARIANTS ---
-  const containerVars = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
-  };
-  const itemVars = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
   };
 
   if (loading) {
@@ -218,7 +254,7 @@ export default function Dashboard() {
         {/* TACTICAL TAB SWITCHER */}
         <div className="flex gap-2 mb-10 overflow-x-auto no-scrollbar pb-2">
            <button 
-             onClick={() => setActiveTab("MISSIONS")}
+             onClick={() => {setActiveTab("MISSIONS"); setIsEditing(false);}}
              className={`px-8 py-3 text-[10px] md:text-xs font-black tracking-widest uppercase transition-all flex items-center gap-3 rounded-full border ${activeTab === 'MISSIONS' ? 'bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]' : 'bg-[#0a0a0a] text-gray-500 border-white/10 hover:border-white/30 hover:text-white'}`}
            >
              <Shield className="w-4 h-4" /> ACTIVE MISSIONS
@@ -235,18 +271,18 @@ export default function Dashboard() {
         {/* TAB 1: MISSIONS */}
         {/* ========================================================= */}
         {activeTab === "MISSIONS" && (
-          <motion.div variants={containerVars} initial="hidden" animate="show" className="space-y-6">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             
             {/* Quick Stats */}
-            <motion.div variants={itemVars} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 font-mono">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 font-mono">
                <StatBox label="Total Dossiers" value={requests.length} color="text-white" />
                <StatBox label="Field Active" value={requests.filter(r => r.status === 'ACTIVE').length} color="text-emerald-400" />
                <StatBox label="Reviewing" value={requests.filter(r => r.status === 'PENDING').length} color="text-amber-400" />
                <StatBox label="Completed" value={requests.filter(r => r.status === 'COMPLETED').length} color="text-blue-400" />
-            </motion.div>
+            </div>
 
             {requests.length === 0 ? (
-              <motion.div variants={itemVars} className="text-center py-32 border border-dashed border-white/10 rounded-3xl bg-[#0a0a0a]/50 backdrop-blur-md">
+              <div className="text-center py-32 border border-dashed border-white/10 rounded-3xl bg-[#0a0a0a]/50 backdrop-blur-md">
                  <Shield className="w-16 h-16 text-gray-700 mx-auto mb-6 opacity-50"/>
                  <h3 className="text-2xl font-black text-gray-400 uppercase tracking-widest mb-3">No Active Operations</h3>
                  <p className="text-xs font-mono text-gray-600 mb-8 max-w-sm mx-auto">Establish mission parameters to begin surveillance and field operations.</p>
@@ -255,15 +291,15 @@ export default function Dashboard() {
                      START FIRST MISSION &rarr;
                    </button>
                  </Link>
-              </motion.div>
+              </div>
             ) : (
               <div className="space-y-4">
-                {requests.map((req) => {
+                {requests.map((req, i) => {
                   const badge = getStatusBadge(req.status);
                   return (
                     <motion.div 
-                      variants={itemVars}
                       key={req.id}
+                      initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                       className="group bg-[#0a0a0a] border border-white/10 p-6 md:p-8 rounded-2xl hover:border-white/30 transition-all relative overflow-hidden shadow-lg"
                     >
                       <div className={`absolute left-0 top-0 bottom-0 w-1 ${badge.color.replace('text-', 'bg-')}`} />
@@ -339,8 +375,11 @@ export default function Dashboard() {
                   <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none" />
                   <Crosshair className="w-16 h-16 text-pink-600 mx-auto mb-6 opacity-80" />
                   <h3 className="text-3xl font-black uppercase text-white mb-3 tracking-tighter">NO DOSSIER FOUND</h3>
-                  <p className="text-xs text-gray-400 mb-10 tracking-widest uppercase font-bold leading-relaxed max-w-sm mx-auto">
+                  <p className="text-xs text-gray-400 mb-6 tracking-widest uppercase font-bold leading-relaxed max-w-sm mx-auto">
                     You are currently a ghost on the Minder Grid. Inject your dossier to become an active target.
+                  </p>
+                  <p className="text-[9px] text-pink-500/70 mb-10 tracking-widest uppercase font-mono bg-pink-900/10 border border-pink-500/20 p-3 rounded inline-block">
+                    Note: If you already injected a dossier but see this message, the database could not link it to your current authenticated session.
                   </p>
                   <Link href="/minder/enroll">
                     <button className="bg-pink-600 text-white font-black text-xs uppercase px-10 py-5 tracking-[0.3em] hover:bg-pink-500 transition-all shadow-[0_0_40px_rgba(219,39,119,0.4)] rounded-full hover:scale-105 active:scale-95 flex items-center justify-center gap-3 mx-auto">
@@ -348,7 +387,77 @@ export default function Dashboard() {
                     </button>
                   </Link>
                </div>
+             ) : isEditing ? (
+               /* --- EDIT DOSSIER FORM --- */
+               <div className="bg-[#0a0a0f] border border-pink-500/50 p-8 md:p-12 rounded-[3rem] max-w-3xl w-full shadow-[0_0_60px_rgba(219,39,119,0.15)] relative overflow-hidden">
+                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none" />
+                 
+                 <div className="flex justify-between items-center mb-8 relative z-10 border-b border-white/10 pb-6">
+                   <h3 className="text-2xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+                     <Edit2 className="w-6 h-6 text-pink-500" /> EDIT DOSSIER
+                   </h3>
+                   <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+                 </div>
+
+                 <form onSubmit={handleUpdateDossier} className="space-y-8 relative z-10">
+                   
+                   {/* Image Upload */}
+                   <div className="flex flex-col items-center">
+                     <div onClick={() => fileInputRef.current?.click()} className="relative w-40 h-40 rounded-3xl bg-black border border-white/20 flex flex-col items-center justify-center cursor-pointer overflow-hidden group hover:border-pink-500 transition-colors">
+                       {editForm.preview ? (
+                         <>
+                           <img src={editForm.preview} alt="Preview" className="w-full h-full object-cover opacity-80 group-hover:opacity-40 transition-opacity" />
+                           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                             <Upload className="w-6 h-6 text-pink-500" />
+                           </div>
+                         </>
+                       ) : (
+                         <div className="text-gray-600 flex flex-col items-center">
+                           <Upload className="w-6 h-6 mb-2" />
+                           <span className="text-[10px] font-black uppercase tracking-widest">UPLOAD</span>
+                         </div>
+                       )}
+                     </div>
+                     <input type="file" ref={fileInputRef} onChange={handleImageSelect} accept="image/*" className="hidden" />
+                     <p className="text-[9px] text-gray-500 mt-4 uppercase tracking-widest">Click to update visual asset</p>
+                   </div>
+
+                   {/* Fields */}
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div>
+                       <label className="text-[10px] uppercase text-gray-400 font-black tracking-widest mb-2 block">Alias</label>
+                       <input type="text" required value={editForm.alias} onChange={e => setEditForm({...editForm, alias: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-pink-500/50" />
+                     </div>
+                     <div>
+                       <label className="text-[10px] uppercase text-gray-400 font-black tracking-widest mb-2 block">Age</label>
+                       <input type="number" required min={13} value={editForm.age} onChange={e => setEditForm({...editForm, age: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-pink-500/50" />
+                     </div>
+                   </div>
+
+                   <div>
+                     <label className="text-[10px] uppercase text-gray-400 font-black tracking-widest mb-2 block">Instagram</label>
+                     <div className="relative">
+                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 font-black">@</span>
+                       <input type="text" required value={editForm.instagram_id} onChange={e => setEditForm({...editForm, instagram_id: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl py-4 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-pink-500/50" />
+                     </div>
+                   </div>
+
+                   <div>
+                     <label className="text-[10px] uppercase text-gray-400 font-black tracking-widest mb-2 flex justify-between">
+                       <span>Briefing Notes</span>
+                       <span className={editForm.bio.length >= 150 ? 'text-red-500' : 'text-gray-600'}>{editForm.bio.length}/150</span>
+                     </label>
+                     <textarea required maxLength={150} rows={4} value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-pink-500/50 resize-none custom-scrollbar" />
+                   </div>
+
+                   <button type="submit" disabled={updating} className="w-full bg-pink-600 text-white font-black uppercase py-5 tracking-[0.3em] rounded-2xl hover:bg-pink-500 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
+                     {updating ? <Activity className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                     {updating ? 'SAVING...' : 'OVERWRITE RECORD'}
+                   </button>
+                 </form>
+               </div>
              ) : (
+               /* --- VIEW DOSSIER STATE --- */
                <div className="flex flex-col md:flex-row gap-10 items-center md:items-start max-w-4xl w-full">
                  
                  {/* ID CARD REPLICA */}
@@ -378,14 +487,12 @@ export default function Dashboard() {
                        <h3 className="text-xl font-black text-white uppercase tracking-widest mb-2 flex items-center gap-3">
                          <Shield className="w-5 h-5 text-gray-500" /> DOSSIER MANAGEMENT
                        </h3>
-                       <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-8">Current Status: Visibile on Grid</p>
+                       <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-8">Current Status: Visible on Grid</p>
                        
                        <div className="space-y-4">
-                         <Link href="/minder/enroll" className="block">
-                           <button className="w-full bg-white/5 border border-white/10 text-white font-black text-xs uppercase px-6 py-4 tracking-[0.2em] hover:bg-white/10 transition-all rounded-xl flex items-center justify-center gap-3 active:scale-95">
-                             <Zap className="w-4 h-4 text-pink-500" /> UPDATE INTEL (OVERWRITE)
-                           </button>
-                         </Link>
+                         <button onClick={startEdit} className="w-full bg-white/5 border border-white/10 text-white font-black text-xs uppercase px-6 py-4 tracking-[0.2em] hover:bg-white/10 transition-all rounded-xl flex items-center justify-center gap-3 active:scale-95">
+                           <Edit2 className="w-4 h-4 text-pink-500" /> EDIT DOSSIER INTEL
+                         </button>
                          <button 
                            onClick={handlePurgeMinder}
                            disabled={purging}
