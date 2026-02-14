@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Siren, 
   Terminal, ChevronRight, LogOut, Flame, Crosshair, Zap,
-  Radar, Activity, MapPin, Power
+  Radar, Activity, MapPin, useScroll, Power
 } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -178,13 +178,10 @@ export default function Home() {
   const router = useRouter();
   const supabase = createClientComponentClient();
   
-  const { scrollYProgress } = useScroll();
-  const y = useTransform(scrollYProgress, [0, 1], ["0%", "20%"]);
-  const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
-  
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [agreed, setAgreed] = useState(true); 
   const [progress, setProgress] = useState(0);
+  const [gridLoading, setGridLoading] = useState(false);
 
   const adRef = useRef(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -195,6 +192,12 @@ export default function Home() {
     const x = ((e.clientX - rect.left) / rect.width - 0.5) * 15;
     const y = ((e.clientY - rect.top) / rect.height - 0.5) * -15;
     setMousePos({ x, y });
+  };
+
+  // Navigate to Grid with Loading State
+  const handleGridNav = () => {
+    setGridLoading(true);
+    router.push('/minder');
   };
 
   // AUTH & WAIVER CHECK
@@ -328,11 +331,12 @@ export default function Home() {
             </div>
             
             {/* MINDER TACTICAL BADGE - Fixed to just show text MINDER */}
-            <Link href="/minder" className="group shrink-0">
+            <button onClick={handleGridNav} disabled={gridLoading} className="group shrink-0 disabled:opacity-70">
               <span className="flex items-center justify-center gap-1.5 md:gap-2 text-pink-500 transition-colors border border-pink-500/50 bg-pink-900/20 px-3 md:px-4 py-1.5 md:py-2 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)] hover:shadow-[0_0_30px_rgba(219,39,119,0.6)]">
-                <span className="font-black tracking-[0.2em]">MINDER</span>
+                {gridLoading ? <Radar className="w-3 h-3 md:w-4 md:h-4 animate-spin" /> : <Crosshair className="w-3 h-3 md:w-4 md:h-4 animate-spin-slow-3d" />}
+                <span className="font-black tracking-[0.2em]">{gridLoading ? 'DECRYPTING' : 'MINDER'}</span>
               </span>
-            </Link>
+            </button>
 
             {/* Dynamic Auth Buttons */}
             {isLoggedIn ? (
@@ -380,7 +384,7 @@ export default function Home() {
           {/* Cinematic Scanning Laser (Translate3D) */}
           <div className="absolute top-0 left-0 w-full h-1 bg-red-500/50 shadow-[0_0_30px_rgba(220,38,38,1)] animate-laser-scan-3d pointer-events-none z-10" />
 
-          <motion.div style={{ y, opacity }} className="relative z-20 text-center max-w-[1400px] w-full flex flex-col items-center hw-accel">
+          <div className="relative z-20 text-center max-w-[1400px] w-full flex flex-col items-center hw-accel">
             
             <div className="inline-flex items-center gap-2 md:gap-3 px-4 md:px-5 py-2 border border-yellow-500/50 bg-yellow-900/20 rounded-full mb-8 md:mb-10 backdrop-blur-md shadow-[0_0_30px_rgba(234,179,8,0.3)]">
                <Siren className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 animate-pulse" />
@@ -415,7 +419,7 @@ export default function Home() {
                 // {siteConfig.hero.manifesto}
               </p>
             </div>
-          </motion.div>
+          </div>
 
           {/* Deep Ambient Glow (Static size, rasterized) */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[800px] md:h-[800px] bg-red-600/20 rounded-full blur-[100px] pointer-events-none z-0 hw-accel" />
@@ -442,12 +446,7 @@ export default function Home() {
 
         {/* --- THE PREMIER MINDER ADVERTISEMENT --- */}
         <section className="px-4 md:px-12 lg:px-20 py-24 md:py-32 max-w-[1600px] mx-auto relative z-20 hw-layer">
-           <motion.div
-             initial={{ opacity: 0, y: 50 }}
-             whileInView={{ opacity: 1, y: 0 }}
-             viewport={{ once: true, margin: "-100px" }}
-             transition={{ duration: 0.8, type: "tween" }}
-             className="bg-[#0a0a0f]/80 backdrop-blur-2xl border border-pink-500/30 p-6 md:p-16 rounded-[2rem] md:rounded-[3rem] relative overflow-hidden group shadow-[0_0_100px_rgba(219,39,119,0.15)] hw-accel"
+           <div className="bg-[#0a0a0f]/80 backdrop-blur-2xl border border-pink-500/30 p-6 md:p-16 rounded-[2rem] md:rounded-[3rem] relative overflow-hidden group shadow-[0_0_100px_rgba(219,39,119,0.15)] hw-accel"
              onMouseMove={handleMouseMove}
              ref={adRef}
            >
@@ -476,23 +475,20 @@ export default function Home() {
                    Welcome to the Black-Ops Meat Market. Browse targets. Log in to decrypt their exact Instagram coordinates. See someone you want? Don't just swipe—hit <strong className="text-pink-400 bg-pink-900/20 px-2 py-0.5 rounded border border-pink-500/30">FORCE MATCH</strong> and let our operatives engineer your serendipity.
                  </p>
                  
-                 <Link href="/minder" className="block w-full md:w-auto">
-                   <button className="w-full md:w-auto bg-pink-600 text-white font-black uppercase px-8 md:px-10 py-4 md:py-5 tracking-[0.3em] shadow-[0_0_40px_rgba(219,39,119,0.6)] flex items-center justify-center gap-3 md:gap-4 active:scale-95 transition-transform rounded-2xl border-2 border-pink-400 text-xs md:text-sm">
-                     <Crosshair className="w-4 h-4 md:w-5 md:h-5" /> ENTER THE GRID
-                   </button>
-                 </Link>
+                 <button 
+                   onClick={handleGridNav}
+                   disabled={gridLoading}
+                   className="w-full md:w-auto bg-pink-600 text-white font-black uppercase px-8 md:px-10 py-4 md:py-5 tracking-[0.3em] shadow-[0_0_40px_rgba(219,39,119,0.6)] flex items-center justify-center gap-3 md:gap-4 active:scale-95 transition-transform rounded-2xl border-2 border-pink-400 text-xs md:text-sm disabled:opacity-70"
+                 >
+                   {gridLoading ? <Radar className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Crosshair className="w-4 h-4 md:w-5 md:h-5" />} 
+                   {gridLoading ? 'DECRYPTING GRID...' : 'ENTER THE GRID'}
+                 </button>
                </div>
 
                {/* Interactive 3D Hologram Terminal (Hardware Accelerated) */}
-               <motion.div 
-                 animate={{ 
-                   rotateX: mousePos.y, 
-                   rotateY: mousePos.x,
-                   z: 0
-                 }}
-                 transition={{ type: "tween", ease: "linear", duration: 0.1 }}
-                 style={{ perspective: 1000 }}
-                 className="hidden lg:flex w-[350px] h-[500px] bg-[#050505] border-2 border-pink-500/50 rounded-3xl relative overflow-hidden shadow-[0_0_80px_rgba(219,39,119,0.3)] items-center justify-center flex-col group/holo hw-accel"
+               <div 
+                 style={{ perspective: 1000, transform: `rotateX(${mousePos.y}deg) rotateY(${mousePos.x}deg) translateZ(0)` }}
+                 className="hidden lg:flex w-[350px] h-[500px] bg-[#050505] border-2 border-pink-500/50 rounded-3xl relative overflow-hidden shadow-[0_0_80px_rgba(219,39,119,0.3)] items-center justify-center flex-col group/holo hw-accel transition-transform duration-100 ease-linear"
                >
                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-pink-500/20 to-transparent h-[200%] animate-scan-3d pointer-events-none mix-blend-screen" />
                   
@@ -516,9 +512,9 @@ export default function Home() {
                    <div className="h-4 w-40 bg-pink-900/80 rounded mb-3" />
                    <div className="h-2 w-24 bg-pink-900/50 rounded" />
                  </div>
-               </motion.div>
+               </div>
              </div>
-           </motion.div>
+           </div>
         </section>
 
         {/* --- THE MENU (SERVICES) Optimized GPU Render --- */}
@@ -534,12 +530,8 @@ export default function Home() {
 
            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 md:gap-8">
               {siteConfig.services.map((service, i) => (
-                <motion.div
+                <div
                   key={service.id}
-                  initial={{ opacity: 0, y: 50 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-50px" }}
-                  transition={{ delay: i * 0.1, duration: 0.5, type: "tween" }}
                   className={`group relative bg-[#0a0a0f] border border-white/10 rounded-3xl p-6 md:p-10 min-h-[400px] md:min-h-[500px] flex flex-col justify-between overflow-hidden hw-accel`}
                 >
                   {/* Performance fix: Fade in a pre-rendered glowing div instead of transitioning border colors */}
@@ -586,7 +578,7 @@ export default function Home() {
                        </Link>
                     </div>
                   </div>
-                </motion.div>
+                </div>
               ))}
            </div>
         </section>
