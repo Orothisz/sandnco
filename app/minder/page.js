@@ -55,6 +55,12 @@ export default function MinderHub() {
       if (error) throw error;
       
       if (data && data.length > 0) {
+        // Cache images to prevent loading lag
+        data.forEach(t => {
+          const img = new Image();
+          img.src = t.image_url;
+        });
+
         setTargets(prev => {
           const existingIds = new Set(prev.map(t => t.id));
           const newTargets = data.filter(t => !existingIds.has(t.id));
@@ -83,7 +89,8 @@ export default function MinderHub() {
            const { data: t } = await supabase.from('minder_targets').select('alias').eq('id', payload.new.target_id).single();
            const alias = t?.alias || 'ANON_TARGET';
            const action = payload.new.action;
-           const color = action === 'SMASH' ? 'text-green-500' : 'text-red-500' : 'text-purple-500';
+           // FIX: The syntax error was on the line below. The nested ternary is now correct.
+           const color = action === 'SMASH' ? 'text-green-500' : action === 'PASS' ? 'text-red-500' : 'text-purple-500';
            
            setFeed(prev => [{ id: payload.new.id, text: `> AGENT_*** ${action}ED [${alias}]`, color }, ...prev].slice(0, 50));
         })
@@ -104,7 +111,7 @@ export default function MinderHub() {
     initializeSystem();
   }, [supabase, fetchTargets]);
 
-  // 3. SWIPE HANDLER (Fixes the Smash/Pass Glitch)
+  // 3. SWIPE HANDLER 
   const processSwipe = async (direction, targetId, isOwnCard = false) => {
     if (!session && !isOwnCard) {
       setLoginWarning(true);
@@ -134,14 +141,14 @@ export default function MinderHub() {
   return (
     <div className="min-h-[100dvh] bg-[#020205] text-white overflow-hidden flex flex-col md:flex-row font-mono relative">
       
-      {/* --- BACKGROUND EFFECTS (Optimized for Safari) --- */}
+      {/* BACKGROUND EFFECTS (Optimized for Safari) */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.6)_50%),linear-gradient(90deg,rgba(255,0,255,0.02),rgba(0,255,255,0.01))] bg-[length:100%_4px,3px_100%]" />
         <div className="absolute bottom-[-50%] left-[-50%] right-[-50%] h-[150%] bg-[linear-gradient(transparent_95%,rgba(219,39,119,0.1)_100%),linear-gradient(90deg,transparent_95%,rgba(219,39,119,0.1)_100%)] bg-[size:50px_50px] [transform:rotateX(75deg)] animate-[grid-move_20s_linear_infinite] opacity-30" />
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-transparent via-[#020205]/80 to-[#020205] z-10" />
       </div>
 
-      {/* --- MOBILE TACTICAL HUD TRIGGER --- */}
+      {/* MOBILE TACTICAL HUD TRIGGER */}
       <button 
         onClick={() => setMobileHudOpen(true)}
         className="md:hidden fixed top-4 right-4 z-[60] w-12 h-12 bg-pink-600 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(219,39,119,0.4)] border border-pink-400 active:scale-90 transition-transform"
@@ -149,7 +156,7 @@ export default function MinderHub() {
         <Activity className="w-5 h-5 text-white animate-pulse" />
       </button>
 
-      {/* --- MOBILE TACTICAL OVERLAY --- */}
+      {/* MOBILE TACTICAL OVERLAY */}
       <AnimatePresence>
         {mobileHudOpen && (
           <motion.div 
@@ -186,7 +193,7 @@ export default function MinderHub() {
         )}
       </AnimatePresence>
 
-      {/* --- DESKTOP PRO FEED SIDEBAR --- */}
+      {/* DESKTOP PRO FEED SIDEBAR */}
       <div className="hidden md:flex flex-col w-[400px] bg-black/80 backdrop-blur-md border-r border-pink-600/20 p-10 z-10 shadow-2xl relative">
         <div className="flex items-center gap-4 text-pink-500 mb-8 pb-6 border-b border-pink-900/30">
           <Activity className="w-8 h-8 animate-pulse" />
@@ -222,7 +229,7 @@ export default function MinderHub() {
         </div>
       </div>
 
-      {/* --- MAIN TARGETING GRID (FLEX LAYOUT PREVENTS OVERLAP) --- */}
+      {/* MAIN TARGETING GRID (FLEX LAYOUT PREVENTS OVERLAP) */}
       <div className="flex-1 flex flex-col relative z-10 p-4 md:p-8 h-[100dvh]">
         
         {/* HEADER BLOCK */}
@@ -347,7 +354,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isTop, isOwnCard]);
 
-  // Fix: Animate the card off screen FIRST, then call onSwipe to delete it from state
   const triggerSwipeAnimation = async (direction) => {
     if (isOwnCard && direction !== 'dismiss') return;
 
@@ -357,7 +363,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
     
     await controls.start({ x: exitX, y: exitY, rotate: exitRotate, opacity: 0, transition: { duration: 0.4, ease: "circOut" } });
     
-    // Only process state removal AFTER animation finishes
     onSwipe(direction);
   };
 
@@ -391,7 +396,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
       whileTap={isTop && !isOwnCard ? { cursor: "grabbing", scale: 1.02 } : {}}
       className={`absolute w-full h-full rounded-[2.5rem] bg-[#0c0c15] shadow-2xl overflow-hidden border-2 ${isTop && !isOwnCard ? 'border-white/10 hover:border-white/20' : isOwnCard && isTop ? 'border-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.2)]' : 'border-white/5 opacity-60'}`}
     >
-      {/* Optimized Background Image (No massive backdrop blurs) */}
+      {/* Optimized Background Image Container */}
       <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${target.image_url})` }}>
         <div className="absolute inset-0 bg-gradient-to-t from-[#010103] via-[#010103]/40 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-b from-[#010103]/80 via-transparent to-transparent h-40" />
