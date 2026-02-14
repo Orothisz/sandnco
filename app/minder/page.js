@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, useMotionValue, useTransform, useAnimation, AnimatePresence } from "framer-motion";
-import { useRedFlagAlgorithm } from '../../utils/useRedFlag'; // Adjust path based on where you saved it
+import { useRedFlagAlgorithm } from '../../utils/useRedFlag'; 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   ShieldAlert, Crosshair, Lock, Activity, Terminal, ChevronRight, X, Check, 
