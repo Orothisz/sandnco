@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 // ------------------------------------------------------------------               
-// THE GRID CONTROLLER (v7.0.0 - HYPER-OPTIMIZED SPEED ENGINE)
+// THE GRID CONTROLLER (v8.0.0 - UNIFIED ARCHITECTURE)
 // ------------------------------------------------------------------
 export default function MinderHub() {
   const supabase = createClientComponentClient();
@@ -26,7 +26,7 @@ export default function MinderHub() {
   const [pageOffset, setPageOffset] = useState(0);
   const [fetchingMore, setFetchingMore] = useState(false);
 
-  // 1. HIGH-SPEED DATA INGESTION
+  // 1. DATA INGESTION ENGINE
   const fetchTargets = useCallback(async (currentOffset = 0, currentSession = session) => {
     setFetchingMore(true);
     const limit = 15; 
@@ -54,7 +54,7 @@ export default function MinderHub() {
       if (error) throw error;
       
       if (data && data.length > 0) {
-        // Invisible DOM pre-fetching for instant mobile rendering
+        // High-speed image caching
         data.forEach(t => { const img = new Image(); img.src = t.image_url; });
         
         setTargets(prev => {
@@ -72,13 +72,13 @@ export default function MinderHub() {
     }
   }, [session, supabase]);
 
-  // 2. PARALLELIZED SYSTEM INITIALIZATION (Kills Loading Time)
+  // 2. LIVE FEED INITIALIZATION & REALTIME
   useEffect(() => {
     const initializeSystem = async () => {
       const { data: { session: activeSession } } = await supabase.auth.getSession();
       setSession(activeSession);
       
-      // FIRE MULTIPLE NETWORK CALLS SIMULTANEOUSLY
+      // Parallel execution for speed
       Promise.all([
         fetchTargets(0, activeSession),
         supabase.from('minder_targets').select('id, alias').order('created_at', { ascending: false }).limit(10)
@@ -92,11 +92,10 @@ export default function MinderHub() {
         }
       });
 
-      // REALTIME WEBSOCKET
       const channelId = `minder_broadcast_${Math.random().toString(36).substr(2, 9)}`;
       const channel = supabase.channel(channelId)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'minder_swipes' }, async (payload) => {
-           if (payload.new.swiper_id === activeSession?.user?.id) return; 
+           if (payload.new.swiper_id === activeSession?.user?.id) return; // Ignore own swipes (handled by optimistic UI)
            const { data: t } = await supabase.from('minder_targets').select('alias').eq('id', payload.new.target_id).single();
            const action = payload.new.action;
            const color = action === 'SMASH' ? 'text-green-500' : 'text-red-500';
@@ -114,7 +113,7 @@ export default function MinderHub() {
     initializeSystem();
   }, [supabase, fetchTargets]);
 
-  // 3. OPTIMISTIC UI SWIPE ENGINE
+  // 3. OPTIMISTIC SWIPE ENGINE
   const processSwipe = async (direction, targetId, isOwnCard = false) => {
     if (!session && !isOwnCard) {
       setLoginModalOpen(true);
@@ -123,6 +122,7 @@ export default function MinderHub() {
 
     const targetAlias = targets.find(t => t.id === targetId)?.alias || 'UNKNOWN';
 
+    // Delay pop so animation finishes rendering before deletion
     setTimeout(() => {
       setTargets(prev => {
         const newDeck = [...prev];
@@ -137,13 +137,14 @@ export default function MinderHub() {
     const action = direction === 'right' ? 'SMASH' : 'PASS';
     const color = direction === 'right' ? 'text-green-500' : 'text-red-500';
 
-    // INSTANT FEED UPDATE
+    // INSTANT FEED INJECTION (Optimistic UI)
     setFeed(prev => [{ 
       id: `opt-${Date.now()}`, 
       text: `> YOU ${action}ED [${targetAlias}]`, 
       color 
     }, ...prev].slice(0, 50));
 
+    // Background Database Write
     await supabase.from('minder_swipes').insert([{
       swiper_id: session.user.id, target_id: targetId, action: action
     }]);
@@ -154,7 +155,7 @@ export default function MinderHub() {
   return (
     <div className="h-[100dvh] bg-[#010103] text-white overflow-hidden flex flex-col md:flex-row font-mono relative">
       
-      {/* BACKGROUND ENGINE */}
+      {/* --- BACKGROUND ENGINE --- */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden perspective-[1200px]">
         <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }} />
         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.6)_50%),linear-gradient(90deg,rgba(255,0,255,0.02),rgba(0,255,255,0.01),rgba(255,255,255,0.02))] bg-[length:100%_4px,3px_100%]" />
@@ -162,7 +163,7 @@ export default function MinderHub() {
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-transparent via-[#010103]/80 to-[#010103] z-10" />
       </div>
 
-      {/* CENTRALIZED LOGIN MODAL */}
+      {/* --- CENTRALIZED LOGIN MODAL --- */}
       <AnimatePresence>
         {loginModalOpen && (
           <motion.div 
@@ -192,7 +193,7 @@ export default function MinderHub() {
         )}
       </AnimatePresence>
 
-      {/* MOBILE TACTICAL HUD TRIGGER */}
+      {/* --- MOBILE TACTICAL HUD TRIGGER --- */}
       <button 
         onClick={() => setMobileHudOpen(true)}
         className="md:hidden fixed top-5 right-5 z-[250] w-14 h-14 bg-pink-600 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(219,39,119,0.6)] border-2 border-pink-400 active:scale-90 transition-transform"
@@ -200,7 +201,7 @@ export default function MinderHub() {
         <Activity className="w-6 h-6 text-white animate-pulse" />
       </button>
 
-      {/* MOBILE TACTICAL OVERLAY */}
+      {/* --- MOBILE TACTICAL OVERLAY --- */}
       <AnimatePresence>
         {mobileHudOpen && (
           <motion.div 
@@ -215,6 +216,7 @@ export default function MinderHub() {
                </div>
                <button onClick={() => setMobileHudOpen(false)} className="bg-white/5 p-4 rounded-full border border-white/10 active:bg-white/20"><X className="w-6 h-6" /></button>
             </div>
+            
             <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2 mb-8">
                <div className="text-[11px] text-pink-600 font-black tracking-widest pb-2 flex items-center gap-3">
                  <Radar className="w-5 h-5 animate-spin" /> LIVE INTELLIGENCE
@@ -224,9 +226,11 @@ export default function MinderHub() {
                    {item.text}
                  </motion.div>
                ))}
+               {feed.length === 0 && <div className="text-gray-700 font-black text-xs animate-pulse tracking-[0.2em] mt-20 text-center">SCANNING NETWORK...</div>}
             </div>
+
             <Link href="/minder/enroll" onClick={() => setMobileHudOpen(false)}>
-              <button className="w-full py-6 bg-pink-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_40px_rgba(219,39,119,0.5)] flex items-center justify-center gap-4 text-sm border-b-4 border-pink-800 active:translate-y-1 active:border-b-0 transition-all">
+              <button className="w-full py-6 bg-pink-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl shadow-[0_0_50px_rgba(219,39,119,0.5)] flex items-center justify-center gap-4 text-sm border-b-4 border-pink-800 active:translate-y-1 active:border-b-0 transition-all">
                 <Zap className="w-6 h-6 fill-current" /> INJECT NEW DOSSIER
               </button>
             </Link>
@@ -234,27 +238,38 @@ export default function MinderHub() {
         )}
       </AnimatePresence>
 
-      {/* DESKTOP PRO FEED SIDEBAR */}
+      {/* --- DESKTOP PRO FEED SIDEBAR --- */}
       <div className="hidden md:flex flex-col w-[480px] bg-black/90 backdrop-blur-3xl border-r border-pink-600/20 p-12 z-[100] shadow-[60px_0_150px_rgba(0,0,0,1)] relative overflow-hidden h-full">
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-pink-500/5 via-transparent to-transparent animate-[scan_10s_linear_infinite] pointer-events-none" />
+
         <div className="flex items-center gap-6 text-pink-500 mb-12 pb-10 border-b border-pink-900/40 relative z-10 pt-10">
-          <div className="p-4 bg-pink-900/20 rounded-2xl border border-pink-500/30 shadow-[0_0_30px_rgba(219,39,119,0.3)]"><Activity className="w-10 h-10 animate-pulse" /></div>
+          <div className="p-4 bg-pink-900/20 rounded-2xl border border-pink-500/30 shadow-[0_0_30px_rgba(219,39,119,0.3)]">
+            <Activity className="w-10 h-10 animate-pulse" />
+          </div>
           <div>
             <h2 className="font-black tracking-tighter uppercase text-3xl leading-none">GLOBAL FEED</h2>
-            <p className="text-[10px] text-pink-800 font-black mt-3 tracking-[0.4em]">ENCRYPTED UPLINK</p>
+            <p className="text-[10px] text-pink-800 font-black mt-3 tracking-[0.4em]">ENCRYPTED UPLINK // ACTIVE</p>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto space-y-6 custom-scrollbar pr-5 relative z-10">
+        
+        <div className="flex-1 overflow-y-auto space-y-7 custom-scrollbar pr-5 relative z-10">
           <AnimatePresence mode="popLayout">
+            {feed.length === 0 && <div className="text-gray-900 animate-pulse font-black text-sm tracking-[0.5em] mt-32 text-center">DECRYPTING...</div>}
             {feed.map((item) => (
-              <motion.div key={item.id} initial={{ opacity: 0, x: -40, filter: "blur(10px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} className={`${item.color} font-black border-l-4 border-current pl-7 py-5 bg-gradient-to-r from-white/5 to-transparent rounded-r shadow-2xl relative group overflow-hidden`}>
+              <motion.div 
+                key={item.id}
+                initial={{ opacity: 0, x: -50, filter: "blur(10px)" }}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                className={`${item.color} font-black border-l-4 border-current pl-7 py-5 bg-gradient-to-r from-white/5 to-transparent rounded-r shadow-2xl relative group overflow-hidden`}
+              >
                 <div className="absolute inset-y-0 left-0 w-1 bg-current opacity-20" />
-                <span className="text-[9px] opacity-40 block mb-2 font-mono tracking-[0.5em] uppercase italic">Signal_Aquired</span>
+                <span className="text-[9px] opacity-40 block mb-3 font-mono tracking-[0.5em] uppercase italic">Signal_Logged</span>
                 <span className="text-sm tracking-tight leading-relaxed">{item.text}</span>
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
+        
         <div className="pt-12 border-t border-pink-600/20 mt-10 relative z-10">
            <Link href="/minder/enroll" className="block relative z-[200]">
              <button className="w-full py-6 bg-pink-600 text-white text-sm font-black tracking-[0.3em] hover:bg-pink-500 transition-all shadow-[0_0_60px_rgba(219,39,119,0.5)] group flex items-center justify-center gap-4 rounded-2xl border-b-4 border-pink-900 active:border-b-0 active:translate-y-1 relative z-[200]">
@@ -264,8 +279,8 @@ export default function MinderHub() {
         </div>
       </div>
 
-      {/* MAIN TARGETING GRID */}
-      <div className="flex-1 flex flex-col relative z-10 p-6 md:p-10 h-[100dvh] overflow-hidden">
+      {/* --- MAIN TARGETING GRID (UNIFIED CSS LAYOUT) --- */}
+      <div className="flex-1 flex flex-col relative z-10 p-6 md:p-10 h-full overflow-hidden">
         
         {/* HEADER BLOCK */}
         <div className="flex justify-between items-start w-full shrink-0 relative z-[200]">
@@ -273,18 +288,25 @@ export default function MinderHub() {
              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> BACK TO BASE
            </Link>
            <div className="flex flex-col items-end pointer-events-none">
-             <h1 className="text-4xl md:text-6xl font-black italic tracking-tighter text-white drop-shadow-[0_0_40px_rgba(219,39,119,0.6)]">MINDER<span className="text-pink-600">_</span></h1>
-             <p className="text-[8px] md:text-[10px] font-black text-pink-500 uppercase tracking-[0.3em] bg-pink-900/30 px-4 py-1.5 rounded-full border border-pink-500/20 mt-3 backdrop-blur-md shadow-inner">LAWSUIT PROTOCOL ACTIVE</p>
+             <h1 className="text-4xl md:text-6xl font-black italic tracking-tighter text-white drop-shadow-[0_0_40px_rgba(219,39,119,0.6)]">
+               MINDER<span className="text-pink-600">_</span>
+             </h1>
+             <p className="text-[8px] md:text-[10px] font-black text-pink-500 uppercase tracking-[0.3em] bg-pink-900/30 px-4 py-1.5 rounded-full border border-pink-500/20 mt-3 backdrop-blur-md shadow-inner">
+               LAWSUIT PROTOCOL ACTIVE
+             </p>
            </div>
         </div>
 
-        {/* FLUID TARGET VIEWPORT */}
-        <div className="flex-1 min-h-0 w-full flex items-center justify-center relative my-6 z-10">
+        {/* --- UNIFIED TARGET VIEWPORT --- 
+            This forces a minimum height on mobile so it physically CANNOT collapse. */}
+        <div className="flex-1 w-full flex items-center justify-center relative my-6 z-10 min-h-[500px]">
           {loading ? (
             <div className="text-pink-500 flex flex-col items-center gap-10">
               <div className="relative scale-125">
                 <Radar className="w-28 h-28 animate-spin opacity-40 text-pink-600" />
-                <div className="absolute inset-0 flex items-center justify-center"><div className="w-14 h-14 border-4 border-pink-500 rounded-full animate-ping" /></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                   <div className="w-14 h-14 border-4 border-pink-500 rounded-full animate-ping" />
+                </div>
               </div>
               <div className="text-sm uppercase tracking-[0.6em] font-black animate-pulse text-center">Scanning Grid...</div>
             </div>
@@ -292,15 +314,17 @@ export default function MinderHub() {
             <div className="text-center w-full max-w-[420px] bg-black/80 p-14 border-2 border-pink-600/40 rounded-[3rem] backdrop-blur-3xl relative overflow-hidden shadow-[0_0_120px_rgba(219,39,119,0.3)] border-dashed group">
                <Crosshair className="w-24 h-24 mx-auto mb-10 text-pink-500 opacity-60 group-hover:rotate-90 transition-transform duration-1000" />
                <p className="text-3xl uppercase tracking-tighter font-black text-white leading-none">NO BIOMETRICS DETECTED.</p>
-               <p className="text-[11px] mt-8 text-pink-400 font-bold uppercase tracking-[0.3em] leading-relaxed opacity-70">SECTOR NEUTRALIZED. GRID SYNC TERMINATED.<br/><br/>AWAITING FRESH INTEL UPLOADS.</p>
+               <p className="text-[11px] mt-8 text-pink-400 font-bold uppercase tracking-[0.3em] leading-relaxed opacity-70">
+                 SECTOR NEUTRALIZED.<br/><br/>AWAITING FRESH INTEL.
+               </p>
                <Link href="/minder/enroll" className="mt-12 block relative z-50">
-                 <button className="text-xs bg-white text-black px-10 py-5 font-black tracking-[0.4em] rounded-xl flex items-center justify-center gap-4 mx-auto hover:bg-pink-600 hover:text-white transition-all shadow-[0_0_40px_rgba(255,255,255,0.4)] uppercase active:scale-95 w-full">
+                 <button className="w-full text-xs bg-white text-black px-10 py-5 font-black tracking-[0.4em] rounded-2xl flex items-center justify-center gap-4 mx-auto hover:bg-pink-600 hover:text-white transition-all shadow-[0_0_40px_rgba(255,255,255,0.4)] uppercase active:scale-95">
                    <Zap className="w-5 h-5 fill-current" /> REPOPULATE SECTOR
                  </button>
                </Link>
             </div>
           ) : (
-            <div className="relative w-full max-w-[440px] h-[65vh] min-h-[480px] max-h-[750px] flex items-center justify-center">
+            <div className="relative w-full max-w-[440px] h-[65vh] min-h-[500px] max-h-[750px] flex items-center justify-center">
               {targets.map((target, index) => {
                 const isTop = index === targets.length - 1;
                 const positionFromTop = targets.length - 1 - index;
@@ -310,8 +334,14 @@ export default function MinderHub() {
 
                 return (
                   <SwipeCard 
-                    key={target.id} target={target} isTop={isTop} depthIndex={positionFromTop} session={session} isOwnCard={isOwnCard} 
-                    onSwipe={(dir) => processSwipe(dir, target.id, isOwnCard)} onForceMatch={() => router.push(`/request?target=${encodeURIComponent(target.alias)}&service=matchup`)}
+                    key={target.id} 
+                    target={target} 
+                    isTop={isTop} 
+                    depthIndex={positionFromTop}
+                    session={session}
+                    isOwnCard={isOwnCard}
+                    onSwipe={(dir) => processSwipe(dir, target.id, isOwnCard)}
+                    onForceMatch={() => router.push(`/request?target=${encodeURIComponent(target.alias)}&service=matchup`)}
                   />
                 )
               })}
@@ -319,15 +349,18 @@ export default function MinderHub() {
           )}
         </div>
 
-        {/* TACTICAL INSTRUCTIONS HUD */}
-        <div className="shrink-0 flex flex-col items-center gap-3 opacity-30 select-none pb-2 pointer-events-none group hover:opacity-60 transition-opacity z-0">
+        {/* TACTICAL INSTRUCTIONS HUD (FOOTER) */}
+        <div className="shrink-0 flex flex-col items-center gap-3 opacity-30 select-none pb-4 pointer-events-none group hover:opacity-60 transition-opacity z-0">
            <div className="flex items-center gap-6 text-[10px] md:text-xs font-black uppercase tracking-[0.5em]">
              <span className="text-red-500 animate-pulse">← Swipe Left to Pass</span>
              <div className="h-4 w-px bg-gray-600 rotate-12" />
              <span className="text-green-500 animate-pulse">Swipe Right to Smash →</span>
            </div>
-           <p className="text-[8px] md:text-[9px] font-bold uppercase tracking-[0.4em] text-gray-500 italic text-center">Grid Scans validated by Gemini Biometric AI Engine</p>
+           <p className="text-[8px] md:text-[9px] font-bold uppercase tracking-[0.4em] text-gray-500 italic text-center">
+             Grid Scans validated by Gemini Biometric AI Engine
+           </p>
         </div>
+
       </div>
 
       <style jsx global>{`
@@ -343,16 +376,16 @@ export default function MinderHub() {
 }
 
 // ------------------------------------------------------------------
-// ADVANCED PHYSICS CARD COMPONENT WITH NATIVE IMAGE PRELOAD
+// ADVANCED PHYSICS CARD COMPONENT WITH HARDWARE BUTTONS
 // ------------------------------------------------------------------
 const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, onSwipe, onForceMatch }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
   
   const rotate = useTransform(x, [-250, 250], [-15, 15]);
-  const scale = isTop ? 1 : 1 - (depthIndex * 0.05);
+  const scale = isTop ? 1 : 1 - (depthIndex * 0.06);
   const opacity = useTransform(x, [-250, -150, 0, 150, 250], [0, 1, 1, 1, 0]);
-  const yOffset = isTop ? 0 : depthIndex * 22;
+  const yOffset = isTop ? 0 : depthIndex * 25;
   
   const smashOpacity = useTransform(x, [40, 150], [0, 1]);
   const passOpacity = useTransform(x, [-40, -150], [0, 1]);
@@ -369,6 +402,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
 
   const triggerSwipeAnimation = async (direction) => {
     if (isOwnCard && direction !== 'dismiss') return;
+
     const exitX = direction === 'right' ? 1000 : direction === 'left' ? -1000 : 0;
     const exitY = direction === 'dismiss' ? -1000 : 0;
     const exitRotate = direction === 'right' ? 45 : direction === 'left' ? -45 : 0;
@@ -407,28 +441,28 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
       whileTap={isTop && !isOwnCard ? { cursor: "grabbing", scale: 1.02 } : {}}
       className={`absolute w-full h-full rounded-[2.5rem] bg-[#0c0c15] shadow-[0_40px_100px_rgba(0,0,0,0.8)] overflow-hidden border-2 flex flex-col ${isTop && !isOwnCard ? 'border-white/10 hover:border-white/20' : isOwnCard && isTop ? 'border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]' : 'border-white/5 opacity-50'} transition-all duration-500`}
     >
-      {/* NATIVE HIGH-SPEED IMAGE LOADER */}
-      <div className="absolute inset-0 bg-[#0c0c15]">
-        <img src={target.image_url} alt={target.alias} loading={isTop ? "eager" : "lazy"} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${target.image_url})` }}>
         <div className="absolute inset-0 bg-gradient-to-t from-[#010103] via-[#010103]/40 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-b from-[#010103]/80 via-transparent to-transparent h-48" />
         <div className="absolute top-0 left-0 w-full h-1 bg-pink-500/50 shadow-[0_0_20px_rgba(219,39,119,1)] animate-[scan_4s_linear_infinite] opacity-30 pointer-events-none mix-blend-screen" />
       </div>
 
       {isOwnCard && isTop && (
-        <div className="absolute top-10 left-0 w-full bg-yellow-500 text-black py-3 font-black text-center tracking-[0.4em] text-[10px] uppercase z-30 shadow-2xl flex items-center justify-center gap-4">
+        <div className="absolute top-10 left-0 w-full bg-yellow-500 text-black py-2.5 font-black text-center tracking-[0.4em] text-[10px] uppercase z-30 shadow-2xl flex items-center justify-center gap-4">
           <User className="w-5 h-5 stroke-[3px]" /> MATCH_RECOGNIZED: THIS IS YOU
         </div>
       )}
 
       {isTop && !isOwnCard && (
         <>
-          <motion.div style={{ opacity: smashOpacity }} className="absolute top-28 left-8 border-[10px] border-green-500 text-green-500 font-black text-6xl px-8 py-3 rounded-3xl rotate-[-15deg] uppercase z-20 backdrop-blur-md bg-black/40 shadow-[0_0_80px_rgba(34,197,94,0.8)] pointer-events-none scale-110">SMASH</motion.div>
-          <motion.div style={{ opacity: passOpacity }} className="absolute top-28 right-8 border-[10px] border-red-500 text-red-500 font-black text-6xl px-8 py-3 rounded-3xl rotate-[15deg] uppercase z-20 backdrop-blur-md bg-black/40 shadow-[0_0_80px_rgba(239,68,68,0.8)] pointer-events-none scale-110">PASS</motion.div>
+          <motion.div style={{ opacity: smashOpacity }} className="absolute top-28 left-8 border-[10px] border-green-500 text-green-500 font-black text-6xl px-8 py-3 rounded-[2rem] rotate-[-15deg] uppercase z-20 backdrop-blur-md bg-black/40 shadow-[0_0_80px_rgba(34,197,94,0.8)] pointer-events-none scale-110">SMASH</motion.div>
+          <motion.div style={{ opacity: passOpacity }} className="absolute top-28 right-8 border-[10px] border-red-500 text-red-500 font-black text-6xl px-8 py-3 rounded-[2rem] rotate-[15deg] uppercase z-20 backdrop-blur-md bg-black/40 shadow-[0_0_80px_rgba(239,68,68,0.8)] pointer-events-none scale-110">PASS</motion.div>
+          <motion.div className="absolute inset-0 bg-green-500/10 pointer-events-none mix-blend-screen transition-opacity" style={{ opacity: smashOpacity }} />
+          <motion.div className="absolute inset-0 bg-red-500/10 pointer-events-none mix-blend-screen transition-opacity" style={{ opacity: passOpacity }} />
         </>
       )}
 
-      <div className="mt-auto w-full p-6 md:p-8 flex flex-col gap-4 bg-gradient-to-t from-[#010103] via-[#010103]/98 to-transparent z-10 shrink-0 pointer-events-auto">
+      <div className="mt-auto w-full p-6 md:p-8 flex flex-col gap-5 bg-gradient-to-t from-[#010103] via-[#010103]/98 to-transparent z-10 shrink-0 pointer-events-auto">
         <div className="flex justify-between items-end">
           <div className="flex-1 min-w-0 pr-4">
             <h2 className="text-4xl md:text-5xl font-black uppercase text-white tracking-tighter drop-shadow-2xl flex items-center gap-3 truncate">
@@ -436,15 +470,16 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
             </h2>
             
             {session ? (
-              <div className="text-xs md:text-sm font-black text-white bg-pink-600 w-fit px-5 py-2.5 mt-3 rounded-xl shadow-[0_0_30px_rgba(219,39,119,0.8)] flex items-center gap-3 border border-pink-400/50">
+              <div className="text-xs md:text-sm font-black text-white bg-pink-600 w-fit px-5 py-2 mt-3 rounded-xl shadow-[0_0_30px_rgba(219,39,119,0.8)] flex items-center gap-3 border border-pink-400/50">
                 <Terminal className="w-4 h-4" /> @{target.instagram_id}
               </div>
             ) : (
-              <div className="text-[10px] md:text-xs font-black text-red-400 bg-red-950/80 w-fit px-4 py-2 mt-3 border border-red-900/80 rounded-lg flex items-center gap-3 backdrop-blur-3xl uppercase tracking-[0.2em] shadow-lg">
+              <div className="text-[10px] md:text-[11px] font-black text-red-400 bg-red-950/80 w-fit px-4 py-2 mt-3 border border-red-900/80 rounded-lg flex items-center gap-3 backdrop-blur-3xl uppercase tracking-[0.2em] shadow-lg">
                 <Lock className="w-3 h-3" /> COORDS ENCRYPTED
               </div>
             )}
           </div>
+
           <div className="text-center bg-black/95 p-3 md:p-4 rounded-2xl border border-white/10 backdrop-blur-3xl shadow-2xl flex flex-col items-center min-w-[80px]">
             <div className="text-[8px] md:text-[9px] text-red-500 font-black uppercase tracking-[0.3em] mb-1 leading-none">RED_FLAG</div>
             <div className="text-3xl md:text-4xl font-black text-white leading-none tracking-tighter">{redFlagScore}%</div>
@@ -454,14 +489,27 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
         <div className="relative">
           <div className="absolute -left-4 top-0 w-1.5 h-full bg-pink-600/40 rounded-full" />
           <p className="text-xs md:text-sm text-gray-300 font-bold leading-relaxed bg-white/5 p-5 rounded-[1.5rem] border border-white/5 backdrop-blur-sm shadow-inner italic">
-            {session ? `"${target.bio}"` : <span className="flex flex-wrap gap-1.5 items-center opacity-60"><EyeOff className="w-4 h-4 inline text-red-500 mr-1" />{target.bio.split(' ').map((word, i) => i % 2 === 0 ? '████' : word).join(' ')}</span>}
+            {session ? (
+              `"${target.bio}"`
+            ) : (
+              <span className="flex flex-wrap gap-1.5 items-center opacity-60">
+                <EyeOff className="w-4 h-4 inline text-red-500 mr-1" />
+                {target.bio.split(' ').map((word, i) => i % 2 === 0 ? '████' : word).join(' ')}
+              </span>
+            )}
           </p>
         </div>
 
+        {/* PHYSICAL HARDWARE BUTTONS */}
         {isTop && (
           <div className="mt-2 flex gap-3" onPointerDown={(e) => e.stopPropagation()}>
              {isOwnCard ? (
-               <button onClick={() => triggerSwipeAnimation('dismiss')} className="w-full bg-yellow-500 text-black py-4 md:py-5 rounded-[1.2rem] text-[10px] md:text-xs font-black uppercase tracking-[0.4em] hover:bg-white transition-all flex items-center justify-center gap-3 shadow-[0_0_40px_rgba(234,179,8,0.4)] active:scale-95"><X className="w-5 h-5 stroke-[4px]" /> DISMISS</button>
+               <button 
+                 onClick={() => triggerSwipeAnimation('dismiss')} 
+                 className="w-full bg-yellow-500 text-black py-4 md:py-5 rounded-[1.2rem] text-[10px] md:text-xs font-black uppercase tracking-[0.4em] hover:bg-white transition-all flex items-center justify-center gap-3 shadow-[0_0_40px_rgba(234,179,8,0.4)] active:scale-95"
+               >
+                 <X className="w-5 h-5 stroke-[4px]" /> DISMISS DOSSIER
+               </button>
              ) : (
                <>
                  <button onClick={() => triggerSwipeAnimation('left')} className="flex-1 relative group overflow-hidden rounded-[1.2rem] bg-red-950/60 border border-red-500/30 text-red-500 font-black text-xs py-4 md:py-5 transition-all hover:bg-red-900/80 hover:border-red-400 hover:shadow-[0_0_40px_rgba(220,38,38,0.5)] active:scale-95 active:translate-y-1 z-50">
