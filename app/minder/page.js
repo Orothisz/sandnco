@@ -308,7 +308,7 @@ export default function MinderHub() {
                <p className="text-xl uppercase tracking-widest font-black text-white">GRID CLEARED.</p>
             </div>
           ) : (
-            <div className="relative w-[95%] md:w-full h-[85dvh] md:h-full max-h-[800px] flex items-center justify-center">
+            <div className="relative w-[95%] md:w-full h-[85dvh] md:h-full max-h-[800px] flex items-center justify-center pb-20 md:pb-0">
               <AnimatePresence>
                 {/* WE ONLY RENDER THE 3 CARDS IN THE DOM SLICE */}
                 {visibleCards.map((card) => (
@@ -327,6 +327,15 @@ export default function MinderHub() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* --- MOBILE INJECT DOSSIER BUTTON (FIXED BOTTOM) --- */}
+      <div className="md:hidden fixed bottom-6 left-0 w-full px-6 z-[300] flex justify-center pointer-events-none">
+        <Link href="/minder/enroll" className="w-full max-w-[300px] pointer-events-auto">
+           <button className="w-full bg-black/80 border border-pink-500/30 backdrop-blur-xl text-white py-4 rounded-full text-[10px] font-black uppercase tracking-[0.3em] flex justify-center items-center gap-2 shadow-[0_10px_40px_rgba(219,39,119,0.3)] active:scale-95 transition-transform">
+             <Zap className="w-4 h-4 text-pink-500 fill-current" /> INJECT DOSSIER
+           </button>
+        </Link>
       </div>
 
       <style jsx global>{`
