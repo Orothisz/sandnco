@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 // ============================================================================
-// THE FLAGSHIP ENGINE (v14.0 - HYPER-FLUID UI & RESTRUCTURED NAV)
+// THE FLAGSHIP ENGINE (v14.1 - RESPONSIVE PC HEADER FIX)
 // ============================================================================
 export default function MinderHub() {
   const supabase = createClientComponentClient();
@@ -162,11 +162,9 @@ export default function MinderHub() {
       {/* PREMIUM BACKGROUND */}
       {/* -------------------------------------------------------------------------- */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        {/* Subtle glowing grid */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] [transform:perspective(1000px)_rotateX(60deg)_translateY(-100px)_translateZ(-200px)] opacity-30" />
         <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }} />
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-transparent via-black/80 to-black z-10" />
-        {/* Ambient Pink Glow */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-pink-600/5 rounded-full blur-[150px]" />
       </div>
 
@@ -190,21 +188,16 @@ export default function MinderHub() {
       </AnimatePresence>
 
       {/* -------------------------------------------------------------------------- */}
-      {/* RESTRUCTURED MOBILE NAVIGATION */}
+      {/* MOBILE NAVIGATION */}
       {/* -------------------------------------------------------------------------- */}
       <div className="md:hidden fixed top-0 left-0 w-full z-[500] bg-gradient-to-b from-black via-black/80 to-transparent pt-5 pb-10 px-5 pointer-events-none">
-        
-        {/* Main Header Row */}
         <div className="flex justify-between items-center w-full pointer-events-auto mb-4">
           <Link href="/" className="bg-white/5 border border-white/10 p-3 rounded-full backdrop-blur-md shadow-lg active:scale-90 transition-transform">
             <ChevronLeft className="w-5 h-5 text-gray-300" />
           </Link>
-          
           <h1 className="text-2xl font-black italic text-white drop-shadow-[0_0_15px_rgba(219,39,119,0.8)] tracking-tighter">
             MINDER<span className="text-pink-500">_</span>
           </h1>
-          
-          {/* Action Icons Group */}
           <div className="flex gap-2">
             <button onClick={() => setMobileLeaderboardOpen(true)} className="bg-black/60 border border-white/10 p-3 rounded-full backdrop-blur-md text-yellow-500 shadow-lg active:scale-90 transition-transform"><Trophy className="w-4 h-4" /></button>
             <button onClick={() => setMobileHudOpen(true)} className="bg-black/60 border border-white/10 p-3 rounded-full backdrop-blur-md text-emerald-400 shadow-lg active:scale-90 transition-transform"><Activity className="w-4 h-4" /></button>
@@ -213,8 +206,6 @@ export default function MinderHub() {
             </Link>
           </div>
         </div>
-
-        {/* Dashboard Edit Link Sub-Header */}
         <div className="flex justify-center pointer-events-auto w-full">
            <Link href="/dashboard" className="flex items-center gap-2 text-[9px] font-bold text-gray-400 hover:text-white uppercase tracking-widest bg-white/5 border border-white/10 px-4 py-1.5 rounded-full backdrop-blur-md transition-colors">
              <Edit2 className="w-3 h-3" /> To edit profile, head to dashboard <ArrowUpRight className="w-3 h-3" />
@@ -299,30 +290,40 @@ export default function MinderHub() {
       {/* -------------------------------------------------------------------------- */}
       {/* THE MAIN VIRTUALIZED GRID */}
       {/* -------------------------------------------------------------------------- */}
-      <div className="flex-1 flex flex-col relative z-10 p-0 md:p-10 h-full overflow-hidden justify-center items-center pt-28 md:pt-10">
+      <div className="flex-1 flex flex-col relative z-10 p-0 md:p-10 h-full overflow-hidden justify-center items-center pt-28 md:pt-24">
         
-        {/* RESTRUCTURED DESKTOP HEADER */}
-        <div className="hidden md:flex justify-between items-start w-full absolute top-10 px-10 z-[200]">
+        {/* ====================================================================== */}
+        {/* RESTRUCTURED DESKTOP HEADER (GRID LAYOUT FIX)                          */}
+        {/* ====================================================================== */}
+        <div className="hidden md:grid grid-cols-[1fr_auto_1fr] items-start w-full absolute top-10 px-6 lg:px-10 z-[200] pointer-events-none">
+           
            {/* Left Config */}
-           <div className="flex flex-col gap-3 items-start">
-             <Link href="/" className="group flex items-center gap-3 text-xs font-black text-gray-400 hover:text-white transition-all uppercase tracking-widest bg-white/5 px-6 py-3.5 rounded-full border border-white/10 backdrop-blur-md shadow-xl">
+           <div className="flex flex-col gap-3 items-start pointer-events-auto justify-self-start">
+             <Link href="/" className="group flex items-center gap-2 lg:gap-3 text-[10px] lg:text-xs font-black text-gray-400 hover:text-white transition-all uppercase tracking-widest bg-white/5 px-4 lg:px-6 py-3 rounded-full border border-white/10 backdrop-blur-md shadow-xl">
                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> BACK TO BASE
              </Link>
-             <Link href="/dashboard" className="flex items-center gap-2 text-[10px] font-bold text-gray-500 hover:text-pink-400 uppercase tracking-widest bg-black/40 px-5 py-2 rounded-full border border-white/5 backdrop-blur-md transition-colors ml-2">
-               <Terminal className="w-3 h-3" /> To edit profile, head to dashboard <ArrowUpRight className="w-3 h-3" />
+             <Link href="/dashboard" className="flex items-center gap-2 text-[9px] lg:text-[10px] font-bold text-gray-500 hover:text-pink-400 uppercase tracking-widest bg-black/40 px-4 py-2 rounded-full border border-white/5 backdrop-blur-md transition-colors ml-0 lg:ml-2">
+               <Terminal className="w-3 h-3 shrink-0" /> 
+               <span className="hidden xl:inline">To edit profile, head to dashboard</span>
+               <span className="xl:hidden">Edit Profile</span> 
+               <ArrowUpRight className="w-3 h-3 shrink-0" />
              </Link>
            </div>
            
            {/* Center Logo */}
-           <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
-             <h1 className="text-5xl lg:text-6xl font-black italic tracking-tighter text-white drop-shadow-[0_0_30px_rgba(219,39,119,0.5)]">MINDER<span className="text-pink-600">_</span></h1>
-             <p className="text-[9px] font-black text-pink-500 uppercase tracking-[0.4em] bg-pink-900/20 px-4 py-1.5 rounded-full border border-pink-500/20 mt-3 backdrop-blur-md">LAWSUIT PROTOCOL ACTIVE</p>
+           <div className="flex flex-col items-center justify-self-center mt-[-5px]">
+             <h1 className="text-4xl lg:text-5xl xl:text-6xl font-black italic tracking-tighter text-white drop-shadow-[0_0_30px_rgba(219,39,119,0.5)] leading-none">
+               MINDER<span className="text-pink-600">_</span>
+             </h1>
+             <p className="text-[8px] lg:text-[10px] font-black text-pink-500 uppercase tracking-[0.4em] bg-pink-900/20 px-3 lg:px-4 py-1.5 rounded-full border border-pink-500/20 mt-2 lg:mt-3 backdrop-blur-md shadow-inner">
+               LAWSUIT PROTOCOL ACTIVE
+             </p>
            </div>
 
            {/* Right Action */}
-           <div className="flex flex-col items-end pointer-events-auto">
+           <div className="flex flex-col items-end pointer-events-auto justify-self-end">
              <Link href="/minder/enroll">
-               <button className="bg-pink-600 text-white text-[10px] lg:text-xs font-black tracking-widest uppercase hover:bg-pink-500 transition-all shadow-[0_0_40px_rgba(219,39,119,0.4)] flex items-center justify-center gap-3 px-6 lg:px-8 py-4 rounded-full border border-pink-400 active:scale-95">
+               <button className="bg-pink-600 text-white text-[9px] lg:text-[10px] xl:text-xs font-black tracking-widest uppercase hover:bg-pink-500 transition-all shadow-[0_0_40px_rgba(219,39,119,0.4)] flex items-center justify-center gap-2 lg:gap-3 px-5 lg:px-8 py-3 lg:py-4 rounded-full border border-pink-400 active:scale-95">
                  <Zap className="w-4 h-4 fill-current" /> INJECT DOSSIER
                </button>
              </Link>
@@ -448,7 +449,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
       whileTap={isTop && !isOwnCard ? { scale: 0.98 } : {}}
       className={`absolute inset-0 md:inset-auto md:w-full md:h-full rounded-[2.5rem] md:rounded-[3rem] bg-[#050505] shadow-2xl overflow-hidden flex flex-col will-change-transform ${!isTop && 'opacity-80'} ${isOwnCard && isTop ? 'border border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.2)]' : 'border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8)]'}`}
     >
-      {/* Inner Glow Effect */}
       <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none z-10 rounded-[2.5rem] md:rounded-[3rem]" />
       
       <img src={target?.image_url || ''} alt={safeAlias} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none" />
@@ -468,7 +468,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
         </div>
       )}
 
-      {/* PREMIUM GLOWING STAMPS */}
       {isTop && !isOwnCard && (
         <>
           <motion.div style={{ opacity: smashOpacity }} className="absolute top-28 left-6 md:left-10 border-8 border-green-500 text-green-400 font-black text-6xl md:text-7xl px-8 py-2 rounded-3xl rotate-[-15deg] uppercase z-20 bg-black/40 backdrop-blur-md shadow-[0_0_80px_rgba(34,197,94,0.6)] drop-shadow-[0_0_15px_rgba(34,197,94,1)] pointer-events-none">SMASH</motion.div>
