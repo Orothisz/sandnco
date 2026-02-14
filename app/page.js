@@ -375,7 +375,7 @@ export default function Home() {
                   <Link href="/login"><span className="hidden sm:inline text-gray-400 hover:text-white transition-colors">LOGIN</span></Link>
                   <Link href="/login">
                     <button className="bg-white text-black px-6 py-2 hover:bg-red-600 hover:text-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.4)] rounded hover:scale-105 active:scale-95">
-                      ENROLL
+                      LOG IN
                     </button>
                   </Link>
                 </div>
