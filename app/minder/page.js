@@ -28,6 +28,19 @@ export default function MinderHub() {
   const [userSwipes, setUserSwipes] = useState(new Map()); // Track all user swipes: Map<target_id, 'SMASH' | 'PASS'>
   const [toastMessage, setToastMessage] = useState(null); // For non-blocking notifications
   const [stats, setStats] = useState({ mostSmashed: null, mostPassed: null }); // Leaderboard stats
+  const [isSwipeInProgress, setIsSwipeInProgress] = useState(false); // Prevent rapid-fire swipes
+
+  // Haptic feedback for mobile
+  const triggerHaptic = useCallback((intensity = 'medium') => {
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      const patterns = {
+        light: 10,
+        medium: 20,
+        heavy: 50
+      };
+      navigator.vibrate(patterns[intensity] || 20);
+    }
+  }, []);
 
   // 1. OPTIMIZED DATA INGESTION ENGINE
   const fetchTargets = useCallback(async (currentOffset = 0, currentSession = session) => {
@@ -203,10 +216,14 @@ export default function MinderHub() {
     initializeSystem();
   }, [supabase, fetchTargets, fetchStats]);
 
-  // 3. OPTIMISTIC SWIPE ENGINE WITH DUPLICATE DETECTION
   const processSwipe = async (direction, targetId, isOwnCard = false) => {
+    // Prevent rapid-fire swipes
+    if (isSwipeInProgress) return false;
+    setIsSwipeInProgress(true);
+    
     if (!session && !isOwnCard) {
       setLoginModalOpen(true);
+      setIsSwipeInProgress(false);
       return false; 
     }
 
@@ -219,11 +236,14 @@ export default function MinderHub() {
     if (existingSwipe && !isOwnCard) {
       if (existingSwipe === action) {
         // Same action - show toast and don't process
+        triggerHaptic('light');
         setToastMessage(`Already ${action.toLowerCase()}ed ${targetAlias}!`);
         setTimeout(() => setToastMessage(null), 3000);
+        setIsSwipeInProgress(false);
         return false;
       } else {
         // Different action - allow change, update database
+        triggerHaptic('medium');
         setToastMessage(`Changed to ${action} for ${targetAlias}`);
         setTimeout(() => setToastMessage(null), 3000);
         
@@ -248,6 +268,7 @@ export default function MinderHub() {
         // Refresh stats
         fetchStats();
         
+        setIsSwipeInProgress(false);
         return true;
       }
     }
@@ -255,16 +276,25 @@ export default function MinderHub() {
     // New swipe - immediate UI update
     setTargets(prev => {
       const newDeck = prev.slice(0, -1); // Remove last item (current card)
-      if (newDeck.length < 3 && !fetchingMore) {
-        // Fetch more in background
+      
+      // INFINITE LOOP: Auto-fetch more when running low
+      if (newDeck.length < 5 && !fetchingMore) {
         fetchTargets(pageOffset, session);
       }
+      
       return newDeck;
     });
 
-    if (isOwnCard || direction === 'dismiss') return true;
+    if (isOwnCard || direction === 'dismiss') {
+      // Small delay to allow animation to complete
+      setTimeout(() => setIsSwipeInProgress(false), 300);
+      return true;
+    }
 
     const color = direction === 'right' ? 'text-green-500' : 'text-red-500';
+
+    // Haptic feedback
+    triggerHaptic(direction === 'right' ? 'heavy' : 'medium');
 
     // Update local swipe tracking
     setUserSwipes(prev => new Map(prev).set(targetId, action));
@@ -284,6 +314,8 @@ export default function MinderHub() {
       fetchStats();
     }).catch(err => console.error('Swipe save failed:', err));
 
+    // Small delay to allow animation to complete
+    setTimeout(() => setIsSwipeInProgress(false), 300);
     return true;
   };
 
@@ -385,7 +417,7 @@ export default function MinderHub() {
       </AnimatePresence>
 
       {/* --- DESKTOP PRO FEED SIDEBAR --- */}
-      <div className="hidden md:flex flex-col w-[480px] bg-black/90 backdrop-blur-3xl border-r border-pink-600/20 p-12 z-[100] shadow-[60px_0_150px_rgba(0,0,0,1)] relative overflow-hidden h-full">
+      <div className="hidden md:flex flex-col w-[480px] bg-black/90 backdrop-blur-2xl md:backdrop-blur-3xl border-r border-pink-600/20 p-12 z-[100] shadow-[60px_0_150px_rgba(0,0,0,1)] relative overflow-hidden h-full">
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-pink-500/5 via-transparent to-transparent animate-[scan_10s_linear_infinite] pointer-events-none" />
 
         <div className="flex items-center gap-6 text-pink-500 mb-12 pb-10 border-b border-pink-900/40 relative z-10 pt-10">
@@ -455,18 +487,28 @@ export default function MinderHub() {
               </div>
               <div className="text-xs md:text-sm uppercase tracking-[0.4em] md:tracking-[0.6em] font-black animate-pulse text-center">Scanning Grid...</div>
             </div>
-          ) : targets.length === 0 ? (
+          ) : targets.length === 0 && !fetchingMore ? (
             <div className="text-center w-full max-w-[420px] bg-black/80 p-8 md:p-14 border-2 border-pink-600/40 rounded-[2rem] md:rounded-[3rem] backdrop-blur-3xl relative overflow-hidden shadow-[0_0_120px_rgba(219,39,119,0.3)] border-dashed group">
                <Crosshair className="w-16 h-16 md:w-24 md:h-24 mx-auto mb-6 md:mb-10 text-pink-500 opacity-60 group-hover:rotate-90 transition-transform duration-1000" />
-               <p className="text-2xl md:text-3xl uppercase tracking-tighter font-black text-white leading-none">NO BIOMETRICS DETECTED.</p>
+               <p className="text-2xl md:text-3xl uppercase tracking-tighter font-black text-white leading-none">ALL TARGETS PROCESSED</p>
                <p className="text-[10px] md:text-[11px] mt-6 md:mt-8 text-pink-400 font-bold uppercase tracking-[0.3em] leading-relaxed opacity-70">
-                 SECTOR NEUTRALIZED.<br/><br/>AWAITING FRESH INTEL.
+                 YOU'VE REVIEWED EVERYONE!<br/><br/>CHECK BACK LATER FOR NEW PROFILES.
                </p>
                <Link href="/minder/enroll" className="mt-8 md:mt-12 block relative z-50">
                  <button className="w-full text-xs bg-white text-black px-8 md:px-10 py-4 md:py-5 font-black tracking-[0.3em] md:tracking-[0.4em] rounded-2xl flex items-center justify-center gap-3 md:gap-4 mx-auto hover:bg-pink-600 hover:text-white transition-all shadow-[0_0_40px_rgba(255,255,255,0.4)] uppercase active:scale-95">
-                   <Zap className="w-4 h-4 md:w-5 md:h-5 fill-current" /> REPOPULATE
+                   <Zap className="w-4 h-4 md:w-5 md:h-5 fill-current" /> ADD YOUR PROFILE
                  </button>
                </Link>
+            </div>
+          ) : targets.length === 0 && fetchingMore ? (
+            <div className="text-pink-500 flex flex-col items-center gap-10">
+              <div className="relative scale-100 md:scale-125">
+                <Radar className="w-20 h-20 md:w-28 md:h-28 animate-spin opacity-40 text-pink-600" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                   <div className="w-10 h-10 md:w-14 md:h-14 border-4 border-pink-500 rounded-full animate-ping" />
+                </div>
+              </div>
+              <div className="text-xs md:text-sm uppercase tracking-[0.4em] md:tracking-[0.6em] font-black animate-pulse text-center">Loading More...</div>
             </div>
           ) : (
             <div className="relative w-full max-w-[420px] md:max-w-[440px] h-[60vh] md:h-[65vh] min-h-[450px] md:min-h-[500px] max-h-[650px] md:max-h-[750px] flex items-center justify-center">
@@ -491,6 +533,14 @@ export default function MinderHub() {
                   />
                 )
               })}
+              
+              {/* Loading indicator when fetching more in background */}
+              {fetchingMore && targets.length > 0 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-pink-600/90 backdrop-blur-xl px-6 py-3 rounded-full text-xs font-black uppercase tracking-[0.3em] shadow-[0_0_30px_rgba(219,39,119,0.6)] border border-pink-400 flex items-center gap-3 z-[80]">
+                  <Radar className="w-4 h-4 animate-spin" />
+                  Loading More...
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -528,19 +578,19 @@ export default function MinderHub() {
 
       {/* --- LEADERBOARD STATS PANEL --- */}
       {(stats.mostSmashed || stats.mostPassed) && (
-        <div className="fixed top-20 md:top-10 left-4 md:left-auto md:right-[520px] z-[100] flex flex-col gap-3">
+        <div className="fixed bottom-24 md:bottom-auto md:top-10 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-[520px] z-[100] flex flex-row md:flex-col gap-3">
           {stats.mostSmashed && (
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-gradient-to-br from-green-950/95 to-black/95 backdrop-blur-2xl border-2 border-green-500/40 rounded-2xl p-4 shadow-[0_0_40px_rgba(34,197,94,0.3)] min-w-[200px]"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-gradient-to-br from-green-950/95 to-black/95 backdrop-blur-2xl border-2 border-green-500/40 rounded-xl md:rounded-2xl p-3 md:p-4 shadow-[0_0_40px_rgba(34,197,94,0.3)] min-w-[140px] md:min-w-[200px]"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-cover bg-center border-2 border-green-400 shadow-lg" style={{ backgroundImage: `url(${stats.mostSmashed.image_url})` }} />
-                <div className="flex-1">
-                  <div className="text-[8px] text-green-400 font-black uppercase tracking-[0.3em] mb-1">🔥 Most Smashed</div>
-                  <div className="text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostSmashed.alias}</div>
-                  <div className="text-[10px] text-green-300 font-bold">{stats.mostSmashed.count} smashes</div>
+              <div className="flex md:flex-row flex-col items-center gap-2 md:gap-3">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-cover bg-center border-2 border-green-400 shadow-lg flex-shrink-0" style={{ backgroundImage: `url(${stats.mostSmashed.image_url})` }} />
+                <div className="flex-1 text-center md:text-left">
+                  <div className="text-[7px] md:text-[8px] text-green-400 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mb-1">🔥 Top</div>
+                  <div className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostSmashed.alias}</div>
+                  <div className="text-[9px] md:text-[10px] text-green-300 font-bold">{stats.mostSmashed.count} 💚</div>
                 </div>
               </div>
             </motion.div>
@@ -548,17 +598,17 @@ export default function MinderHub() {
           
           {stats.mostPassed && (
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
-              className="bg-gradient-to-br from-red-950/95 to-black/95 backdrop-blur-2xl border-2 border-red-500/40 rounded-2xl p-4 shadow-[0_0_40px_rgba(239,68,68,0.3)] min-w-[200px]"
+              className="bg-gradient-to-br from-red-950/95 to-black/95 backdrop-blur-2xl border-2 border-red-500/40 rounded-xl md:rounded-2xl p-3 md:p-4 shadow-[0_0_40px_rgba(239,68,68,0.3)] min-w-[140px] md:min-w-[200px]"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-cover bg-center border-2 border-red-400 shadow-lg" style={{ backgroundImage: `url(${stats.mostPassed.image_url})` }} />
-                <div className="flex-1">
-                  <div className="text-[8px] text-red-400 font-black uppercase tracking-[0.3em] mb-1">❄️ Most Passed</div>
-                  <div className="text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostPassed.alias}</div>
-                  <div className="text-[10px] text-red-300 font-bold">{stats.mostPassed.count} passes</div>
+              <div className="flex md:flex-row flex-col items-center gap-2 md:gap-3">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-cover bg-center border-2 border-red-400 shadow-lg flex-shrink-0" style={{ backgroundImage: `url(${stats.mostPassed.image_url})` }} />
+                <div className="flex-1 text-center md:text-left">
+                  <div className="text-[7px] md:text-[8px] text-red-400 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mb-1">❄️ Top</div>
+                  <div className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostPassed.alias}</div>
+                  <div className="text-[9px] md:text-[10px] text-red-300 font-bold">{stats.mostPassed.count} 💔</div>
                 </div>
               </div>
             </motion.div>
@@ -575,8 +625,48 @@ export default function MinderHub() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(219, 39, 119, 0.7); }
         
         /* Performance optimizations */
+        * {
+          -webkit-tap-highlight-color: transparent;
+          -webkit-touch-callout: none;
+        }
+        
+        body {
+          overscroll-behavior: none;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+        
+        /* GPU acceleration for animations */
+        .will-change-transform {
+          will-change: transform;
+          transform: translateZ(0);
+          backface-visibility: hidden;
+        }
+        
+        .will-change-opacity {
+          will-change: opacity;
+        }
+        
+        /* Smooth touch interactions */
+        .touch-action-pan-y {
+          touch-action: pan-y;
+        }
+        
         @media (prefers-reduced-motion: reduce) {
-          * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+          }
+        }
+        
+        /* Optimize for 60fps animations */
+        @media (max-width: 768px) {
+          * {
+            -webkit-transform: translate3d(0, 0, 0);
+            transform: translate3d(0, 0, 0);
+          }
         }
       `}</style>
     </div>
@@ -620,7 +710,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
       y: exitY, 
       rotate: exitRotate, 
       opacity: 0, 
-      transition: { duration: 0.3, ease: "circOut" } // Reduced from 0.4
+      transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } // Custom cubic-bezier for snappier feel
     });
     onSwipe(direction);
   };
@@ -746,7 +836,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
       dragElastic={1}
       onDragEnd={handleDragEnd}
       whileTap={isTop && !isOwnCard ? { cursor: "grabbing", scale: 1.01 } : {}}
-      className={`absolute w-full h-full rounded-[2rem] md:rounded-[2.5rem] bg-[#0c0c15] shadow-[0_30px_80px_rgba(0,0,0,0.7)] md:shadow-[0_40px_100px_rgba(0,0,0,0.8)] overflow-hidden border-2 flex flex-col will-change-transform ${isTop && !isOwnCard ? 'border-white/10 hover:border-white/20' : isOwnCard && isTop ? 'border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]' : 'border-white/5 opacity-50'} transition-all duration-500`}
+      className={`absolute w-full h-full rounded-[2rem] md:rounded-[2.5rem] bg-[#0c0c15] shadow-[0_30px_80px_rgba(0,0,0,0.7)] md:shadow-[0_40px_100px_rgba(0,0,0,0.8)] overflow-hidden border-2 flex flex-col will-change-transform touch-action-pan-y ${isTop && !isOwnCard ? 'border-white/10 hover:border-white/20' : isOwnCard && isTop ? 'border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]' : 'border-white/5 opacity-50'} transition-all duration-500`}
     >
       {/* Optimized background image with lazy loading */}
       <div className="absolute inset-0 bg-cover bg-center will-change-transform" style={{ backgroundImage: `url(${target.image_url})` }}>
@@ -769,10 +859,20 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
 
       {isTop && !isOwnCard && (
         <>
-          <motion.div style={{ opacity: smashOpacity }} className="absolute top-20 md:top-28 left-4 md:left-8 border-[6px] md:border-[10px] border-green-500 text-green-500 font-black text-4xl md:text-6xl px-4 md:px-8 py-2 md:py-3 rounded-[1.5rem] md:rounded-[2rem] rotate-[-15deg] uppercase z-20 backdrop-blur-md bg-black/40 shadow-[0_0_60px_rgba(34,197,94,0.7)] md:shadow-[0_0_80px_rgba(34,197,94,0.8)] pointer-events-none scale-100 md:scale-110">SMASH</motion.div>
-          <motion.div style={{ opacity: passOpacity }} className="absolute top-20 md:top-28 right-4 md:right-8 border-[6px] md:border-[10px] border-red-500 text-red-500 font-black text-4xl md:text-6xl px-4 md:px-8 py-2 md:py-3 rounded-[1.5rem] md:rounded-[2rem] rotate-[15deg] uppercase z-20 backdrop-blur-md bg-black/40 shadow-[0_0_60px_rgba(239,68,68,0.7)] md:shadow-[0_0_80px_rgba(239,68,68,0.8)] pointer-events-none scale-100 md:scale-110">PASS</motion.div>
-          <motion.div className="absolute inset-0 bg-green-500/10 pointer-events-none mix-blend-screen transition-opacity" style={{ opacity: smashOpacity }} />
-          <motion.div className="absolute inset-0 bg-red-500/10 pointer-events-none mix-blend-screen transition-opacity" style={{ opacity: passOpacity }} />
+          <motion.div 
+            style={{ opacity: smashOpacity }} 
+            className="absolute top-20 md:top-28 left-4 md:left-8 border-[6px] md:border-[10px] border-green-500 text-green-500 font-black text-4xl md:text-6xl px-4 md:px-8 py-2 md:py-3 rounded-[1.5rem] md:rounded-[2rem] rotate-[-15deg] uppercase z-20 bg-black/40 shadow-[0_0_60px_rgba(34,197,94,0.7)] md:shadow-[0_0_80px_rgba(34,197,94,0.8)] pointer-events-none scale-100 md:scale-110 will-change-transform"
+          >
+            SMASH
+          </motion.div>
+          <motion.div 
+            style={{ opacity: passOpacity }} 
+            className="absolute top-20 md:top-28 right-4 md:right-8 border-[6px] md:border-[10px] border-red-500 text-red-500 font-black text-4xl md:text-6xl px-4 md:px-8 py-2 md:py-3 rounded-[1.5rem] md:rounded-[2rem] rotate-[15deg] uppercase z-20 bg-black/40 shadow-[0_0_60px_rgba(239,68,68,0.7)] md:shadow-[0_0_80px_rgba(239,68,68,0.8)] pointer-events-none scale-100 md:scale-110 will-change-transform"
+          >
+            PASS
+          </motion.div>
+          <motion.div className="absolute inset-0 bg-green-500/10 pointer-events-none mix-blend-screen transition-opacity will-change-opacity" style={{ opacity: smashOpacity }} />
+          <motion.div className="absolute inset-0 bg-red-500/10 pointer-events-none mix-blend-screen transition-opacity will-change-opacity" style={{ opacity: passOpacity }} />
         </>
       )}
 
