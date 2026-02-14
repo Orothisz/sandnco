@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Camera, Upload, AlertTriangle, CheckCircle, ChevronLeft, User, 
-  Hash, AlignLeft, Instagram, Loader, ScanFace 
+  Hash, AlignLeft, Instagram, Loader, ScanFace, Fingerprint
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -38,7 +38,7 @@ export default function EnrollGrid() {
     }
   };
 
-  // Submit to the Gemini API
+  // Submit to the Minder API
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!image) {
@@ -53,7 +53,7 @@ export default function EnrollGrid() {
       formData.append("alias", alias);
       formData.append("age", age);
       formData.append("bio", bio);
-      formData.append("instagram_id", instagram.replace('@', '')); // Strip @ if they added it
+      formData.append("instagram_id", instagram.replace('@', ''));
       formData.append("image", image);
 
       const response = await fetch("/api/minder/enroll", {
@@ -68,7 +68,6 @@ export default function EnrollGrid() {
         setLoading(false);
       } else {
         setMessage({ type: "success", text: "TARGET ACCEPTED. ADDED TO GRID." });
-        // Redirect back to the grid after a short delay
         setTimeout(() => {
           router.push("/minder");
         }, 2000);
@@ -80,69 +79,106 @@ export default function EnrollGrid() {
     }
   };
 
+  // Framer Motion Variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
+
   return (
-    <div className="min-h-screen bg-[#050510] text-gray-200 font-mono flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-[100dvh] bg-[#020205] text-gray-200 font-mono flex flex-col items-center justify-center p-4 relative overflow-hidden">
       
-      {/* BACKGROUND SCANS */}
-      <div className="fixed inset-0 pointer-events-none opacity-20 z-0">
-         <div className="w-full h-full bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+      {/* FLAGSHIP BACKGROUND ENGINE */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }} />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.8)_50%),linear-gradient(90deg,rgba(0,255,0,0.02),rgba(0,255,255,0.01))] bg-[length:100%_4px,3px_100%]" />
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-transparent via-[#020205]/90 to-[#020205] z-10" />
       </div>
 
       <div className="relative z-10 w-full max-w-lg">
-        <Link href="/minder">
-           <button className="flex items-center gap-2 text-xs text-gray-500 hover:text-green-500 mb-6 transition-colors uppercase tracking-widest">
-             <ChevronLeft className="w-4 h-4" /> Return to Radar
+        
+        {/* TOP NAVIGATION */}
+        <Link href="/minder" className="inline-block mb-8">
+           <button className="group flex items-center gap-3 text-xs font-black text-gray-400 hover:text-white transition-all uppercase tracking-[0.2em] bg-white/5 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-xl shadow-xl">
+             <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> CANCEL UPLINK
            </button>
         </Link>
 
-        <div className="bg-black border border-green-900/50 shadow-[0_0_40px_rgba(0,255,0,0.1)] overflow-hidden rounded-lg">
-           
-           {/* HEADER */}
-           <div className="bg-green-900/20 px-4 py-3 border-b border-green-900/50 flex justify-between items-center">
-             <div className="flex items-center gap-3">
-               <ScanFace className="w-5 h-5 text-green-500 animate-pulse" />
-               <h1 className="text-sm font-black text-green-500 uppercase tracking-widest">ENTER THE GRID</h1>
+        {/* MAIN TERMINAL CARD */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, filter: "blur(10px)" }}
+          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+          transition={{ duration: 0.5, ease: "circOut" }}
+          className="bg-black/60 backdrop-blur-2xl border border-white/10 shadow-[0_0_80px_rgba(34,197,94,0.15)] overflow-hidden rounded-[2.5rem] relative"
+        >
+           {/* DECORATIVE TOP BAR */}
+           <div className="bg-gradient-to-r from-green-900/40 via-green-600/10 to-transparent px-8 py-5 border-b border-white/5 flex justify-between items-center relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-green-500 to-transparent opacity-50" />
+             <div className="flex items-center gap-4">
+               <div className="p-2 bg-green-500/20 rounded-xl border border-green-500/30">
+                 <Fingerprint className="w-6 h-6 text-green-500 animate-pulse" />
+               </div>
+               <div>
+                 <h1 className="text-xl font-black text-white uppercase tracking-widest">INJECT DOSSIER</h1>
+                 <div className="text-[9px] text-green-500 font-bold uppercase tracking-[0.3em] mt-1 flex items-center gap-2">
+                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" /> SECURE GRID ENTRY
+                 </div>
+               </div>
              </div>
-             <div className="text-[10px] text-green-700 font-bold uppercase">UPLINK: SECURE</div>
            </div>
 
-           <div className="p-6 md:p-8">
+           <div className="p-8">
              <AnimatePresence>
                {message && (
                  <motion.div 
-                   initial={{ opacity: 0, y: -10 }} 
-                   animate={{ opacity: 1, y: 0 }} 
-                   exit={{ opacity: 0, height: 0 }} 
-                   className={`mb-6 p-3 text-xs border-l-2 flex items-start gap-3 ${message.type === 'error' ? 'bg-red-900/20 border-red-500 text-red-400' : 'bg-green-900/20 border-green-500 text-green-400'}`}
+                   initial={{ opacity: 0, y: -10, scale: 0.95 }} 
+                   animate={{ opacity: 1, y: 0, scale: 1 }} 
+                   exit={{ opacity: 0, height: 0, scale: 0.95 }} 
+                   className={`mb-8 p-4 rounded-2xl text-xs font-bold uppercase tracking-widest border flex items-center gap-4 shadow-xl ${message.type === 'error' ? 'bg-red-950/50 border-red-500/50 text-red-400' : 'bg-green-950/50 border-green-500/50 text-green-400'}`}
                  >
-                   {message.type === 'error' ? <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> : <Loader className="w-4 h-4 shrink-0 mt-0.5 animate-spin" />}
+                   {message.type === 'error' ? <AlertTriangle className="w-5 h-5 shrink-0" /> : <Loader className="w-5 h-5 shrink-0 animate-spin" />}
                    <p className="leading-relaxed">{message.text}</p>
                  </motion.div>
                )}
              </AnimatePresence>
 
-             <form onSubmit={handleSubmit} className="space-y-6">
+             <form onSubmit={handleSubmit} className="space-y-8">
                
-               {/* IMAGE UPLOAD (THE HONEYTRAP) */}
+               {/* TACTICAL IMAGE UPLOAD */}
                <div className="flex flex-col items-center">
                   <div 
                     onClick={() => fileInputRef.current?.click()}
-                    className={`relative w-48 h-48 md:w-56 md:h-56 rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer overflow-hidden transition-all group ${preview ? 'border-green-500 bg-black' : 'border-gray-700 bg-gray-900/50 hover:border-green-500 hover:bg-green-900/10'}`}
+                    className={`relative w-48 h-48 md:w-56 md:h-56 rounded-3xl flex flex-col items-center justify-center cursor-pointer overflow-hidden transition-all duration-500 group ${preview ? 'shadow-[0_0_50px_rgba(34,197,94,0.2)]' : 'bg-white/5 hover:bg-white/10 border border-dashed border-white/20 hover:border-green-500/50'}`}
                   >
+                     {/* Cyberpunk corner brackets */}
+                     <div className="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-green-500/50 rounded-tl-lg pointer-events-none transition-transform group-hover:-translate-x-1 group-hover:-translate-y-1" />
+                     <div className="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-green-500/50 rounded-tr-lg pointer-events-none transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+                     <div className="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-green-500/50 rounded-bl-lg pointer-events-none transition-transform group-hover:-translate-x-1 group-hover:translate-y-1" />
+                     <div className="absolute bottom-4 right-4 w-6 h-6 border-b-2 border-r-2 border-green-500/50 rounded-br-lg pointer-events-none transition-transform group-hover:translate-x-1 group-hover:translate-y-1" />
+
                      {preview ? (
                        <>
-                         <img src={preview} alt="Target Preview" className="w-full h-full object-cover opacity-80 group-hover:opacity-50 transition-opacity" />
-                         {/* Fake Scanning Overlay */}
-                         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-green-500/20 to-transparent h-[200%] animate-[scan_2s_ease-in-out_infinite] pointer-events-none" />
-                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="bg-black/80 text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest border border-white/20">CHANGE IMAGE</span>
+                         <img src={preview} alt="Target Preview" className="w-full h-full object-cover opacity-90 group-hover:opacity-40 transition-opacity duration-300" />
+                         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-green-500/30 to-transparent h-[200%] animate-[scan_2.5s_ease-in-out_infinite] pointer-events-none mix-blend-overlay" />
+                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm">
+                            <span className="bg-black/80 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.3em] border border-white/20 flex items-center gap-2">
+                              <Camera className="w-3 h-3" /> RETARGET
+                            </span>
                          </div>
                        </>
                      ) : (
-                       <>
-                         <Camera className="w-8 h-8 text-gray-500 mb-2 group-hover:text-green-500 transition-colors" />
-                         <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest group-hover:text-green-500">UPLOAD VISUAL</span>
-                       </>
+                       <motion.div whileHover={{ scale: 1.05 }} className="flex flex-col items-center gap-3">
+                         <ScanFace className="w-10 h-10 text-gray-500 group-hover:text-green-400 transition-colors duration-300" />
+                         <span className="text-[10px] text-gray-500 font-black uppercase tracking-[0.3em] group-hover:text-green-400 text-center">INITIALIZE<br/>SCAN</span>
+                       </motion.div>
                      )}
                   </div>
                   <input 
@@ -152,55 +188,86 @@ export default function EnrollGrid() {
                     accept="image/jpeg, image/png, image/webp" 
                     className="hidden" 
                   />
-                  <p className="text-[9px] text-gray-600 mt-3 text-center uppercase tracking-widest max-w-xs">
-                    * ALL IMAGES SUBJECT TO AI BIOMETRIC SCAN. INANIMATE OBJECTS WILL BE REJECTED.
+                  <p className="text-[8px] text-gray-500 mt-4 text-center uppercase tracking-[0.3em] max-w-xs leading-relaxed font-bold">
+                    * AI BIOMETRIC SCAN ACTIVE. INANIMATE OBJECTS REJECTED.
                   </p>
                </div>
 
-               {/* INTEL FIELDS */}
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><User className="w-3 h-3 text-green-600" /> Target Alias</label>
-                   <input type="text" required maxLength={20} value={alias} onChange={(e) => setAlias(e.target.value)} className="w-full bg-black border border-gray-800 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-green-900/10 transition-all placeholder:text-gray-700" placeholder="Codename" />
+               {/* STAGGERED INTEL FIELDS */}
+               <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6 pt-4">
+                 
+                 <div className="grid grid-cols-2 gap-5">
+                   <motion.div variants={itemVariants} className="space-y-2">
+                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em] flex items-center gap-2 ml-1">
+                       <User className="w-3 h-3 text-green-500" /> ALIAS
+                     </label>
+                     <input type="text" required maxLength={20} value={alias} onChange={(e) => setAlias(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-green-500/50 focus:bg-green-950/20 focus:ring-4 focus:ring-green-500/10 transition-all placeholder:text-gray-700 shadow-inner" placeholder="Codename" />
+                   </motion.div>
+                   
+                   <motion.div variants={itemVariants} className="space-y-2">
+                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em] flex items-center gap-2 ml-1">
+                       <Hash className="w-3 h-3 text-green-500" /> AGE
+                     </label>
+                     {/* Lowered minimum age restriction to 13 */}
+                     <input type="number" required min={13} max={99} value={age} onChange={(e) => setAge(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-green-500/50 focus:bg-green-950/20 focus:ring-4 focus:ring-green-500/10 transition-all placeholder:text-gray-700 shadow-inner" placeholder="13+" />
+                   </motion.div>
                  </div>
-                 <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Hash className="w-3 h-3 text-green-600" /> Age</label>
-                   <input type="number" required min={18} max={99} value={age} onChange={(e) => setAge(e.target.value)} className="w-full bg-black border border-gray-800 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-green-900/10 transition-all placeholder:text-gray-700" placeholder="18+" />
-                 </div>
-               </div>
 
-               <div className="space-y-1">
-                 <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Instagram className="w-3 h-3 text-pink-600" /> Instagram Handle</label>
-                 <div className="relative">
-                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 font-bold">@</span>
-                   <input type="text" required value={instagram} onChange={(e) => setInstagram(e.target.value)} className="w-full bg-black border border-gray-800 py-3 pl-8 pr-3 text-sm text-white focus:outline-none focus:border-pink-500 focus:bg-pink-900/10 transition-all placeholder:text-gray-700" placeholder="username" />
-                 </div>
-               </div>
+                 <motion.div variants={itemVariants} className="space-y-2">
+                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em] flex items-center gap-2 ml-1">
+                     <Instagram className="w-3 h-3 text-pink-500" /> INSTAGRAM
+                   </label>
+                   <div className="relative">
+                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 font-black">@</span>
+                     <input type="text" required value={instagram} onChange={(e) => setInstagram(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-2xl py-4 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-pink-500/50 focus:bg-pink-950/20 focus:ring-4 focus:ring-pink-500/10 transition-all placeholder:text-gray-700 shadow-inner" placeholder="username" />
+                   </div>
+                 </motion.div>
 
-               <div className="space-y-1">
-                 <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><AlignLeft className="w-3 h-3 text-green-600" /> Briefing (Bio)</label>
-                 <textarea required maxLength={150} rows={3} value={bio} onChange={(e) => setBio(e.target.value)} className="w-full bg-black border border-gray-800 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-green-900/10 transition-all placeholder:text-gray-700 resize-none custom-scrollbar" placeholder="Give them a reason to swipe... (Max 150 chars)" />
-                 <div className="text-right text-[9px] text-gray-600">{bio.length}/150</div>
-               </div>
+                 <motion.div variants={itemVariants} className="space-y-2">
+                   <div className="flex justify-between items-end ml-1 mr-1">
+                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em] flex items-center gap-2">
+                       <AlignLeft className="w-3 h-3 text-green-500" /> BRIEFING (BIO)
+                     </label>
+                     <span className={`text-[9px] font-bold ${bio.length >= 150 ? 'text-red-500' : 'text-gray-600'}`}>{bio.length}/150</span>
+                   </div>
+                   <textarea required maxLength={150} rows={3} value={bio} onChange={(e) => setBio(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-green-500/50 focus:bg-green-950/20 focus:ring-4 focus:ring-green-500/10 transition-all placeholder:text-gray-700 resize-none custom-scrollbar shadow-inner" placeholder="Provide target background intel..." />
+                 </motion.div>
 
-               <button 
-                 type="submit" 
-                 disabled={loading} 
-                 className="w-full bg-green-600 text-black font-black uppercase py-4 tracking-widest hover:bg-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.3)]"
-               >
-                 {loading ? <><Loader className="w-4 h-4 animate-spin" /> UPLOADING TO GRID...</> : <><Upload className="w-4 h-4" /> INJECT PROFILE</>}
-               </button>
+                 <motion.div variants={itemVariants} className="pt-2">
+                   <button 
+                     type="submit" 
+                     disabled={loading} 
+                     className="w-full relative group overflow-hidden bg-white/5 border border-white/10 rounded-2xl text-white font-black uppercase py-5 tracking-[0.3em] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 hover:border-green-500/50"
+                   >
+                     {/* Button Hover Effect */}
+                     <div className="absolute inset-0 bg-green-600 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out z-0" />
+                     <div className="absolute inset-0 bg-green-500/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-0 delay-75" />
+                     
+                     <span className="relative z-10 flex items-center gap-3 text-xs">
+                       {loading ? (
+                         <><Loader className="w-4 h-4 animate-spin" /> UPLOADING TO GRID...</>
+                       ) : (
+                         <><Upload className="w-4 h-4" /> SUBMIT DOSSIER</>
+                       )}
+                     </span>
+                   </button>
+                 </motion.div>
+
+               </motion.div>
              </form>
            </div>
-        </div>
+        </motion.div>
       </div>
 
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes scan {
           0% { transform: translateY(-100%); }
           50% { transform: translateY(50%); }
           100% { transform: translateY(-100%); }
         }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
     </div>
   );
