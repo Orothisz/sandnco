@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Siren, 
@@ -178,7 +178,6 @@ export default function Home() {
   const router = useRouter();
   const supabase = createClientComponentClient();
   
-  // Parallax Setup (Optimized for Mobile via Transform)
   const { scrollYProgress } = useScroll();
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "20%"]);
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
@@ -193,7 +192,6 @@ export default function Home() {
   const handleMouseMove = (e) => {
     if (!adRef.current) return;
     const rect = adRef.current.getBoundingClientRect();
-    // Reduce movement multiplier for better performance
     const x = ((e.clientX - rect.left) / rect.width - 0.5) * 15;
     const y = ((e.clientY - rect.top) / rect.height - 0.5) * -15;
     setMousePos({ x, y });
@@ -304,65 +302,66 @@ export default function Home() {
         <link rel="icon" href="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=32" />
       </Head>
 
-      <main className="bg-[#020205] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans relative hw-main">
-        <NoiseOverlay />
-        <Scanlines />
-        <PanicButton />
+      {/* EXTRACTED: Fixed Elements moved completely OUTSIDE the transformed main tag to prevent scroll breakage */}
+      <NoiseOverlay />
+      <Scanlines />
+      <PanicButton />
 
-        {/* --- PREMIUM NAVBAR (Mobile & Desktop 60FPS) --- */}
-        <nav className="fixed top-0 w-full z-50 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center bg-[#020205]/80 backdrop-blur-xl border-b border-white/10 shadow-2xl hw-layer">
+      {/* --- PREMIUM NAVBAR (Mobile & Desktop 60FPS) --- */}
+      <nav className="fixed top-0 w-full z-50 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center bg-[#020205]/80 backdrop-blur-xl border-b border-white/10 shadow-2xl hw-layer">
+          
+          {/* Logo Group */}
+          <Link href="/" className="flex items-center gap-2 md:gap-3 group shrink-0 hw-accel">
+            <img src="/logo.png" className="w-7 h-7 md:w-10 md:h-10 object-contain invert transition-transform" alt="logo" />
+            <span className="font-black text-lg md:text-2xl italic tracking-tighter text-white drop-shadow-md">
+              SANDNCO<span className="text-red-600">.LOL</span>
+            </span>
+          </Link>
+
+          {/* Navigation & Actions */}
+          <div className="flex items-center gap-3 md:gap-8 text-[10px] md:text-xs font-mono tracking-widest uppercase font-bold hw-accel">
             
-            {/* Logo Group */}
-            <Link href="/" className="flex items-center gap-2 md:gap-3 group shrink-0 hw-accel">
-              <img src="/logo.png" className="w-7 h-7 md:w-10 md:h-10 object-contain invert transition-transform" alt="logo" />
-              <span className="font-black text-lg md:text-2xl italic tracking-tighter text-white drop-shadow-md">
-                SANDNCO<span className="text-red-600">.LOL</span>
+            {/* Desktop Only Text Links */}
+            <div className="hidden lg:flex gap-6 items-center mr-4">
+              <Link href="#pricing"><span className="text-gray-400 hover:text-white transition-colors cursor-pointer">Pricing</span></Link>
+              <Link href="/legal"><span className="text-gray-400 hover:text-white transition-colors cursor-pointer">Legal</span></Link>
+            </div>
+            
+            {/* MINDER TACTICAL BADGE - Fixed to just show text MINDER */}
+            <Link href="/minder" className="group shrink-0">
+              <span className="flex items-center justify-center gap-1.5 md:gap-2 text-pink-500 transition-colors border border-pink-500/50 bg-pink-900/20 px-3 md:px-4 py-1.5 md:py-2 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)] hover:shadow-[0_0_30px_rgba(219,39,119,0.6)]">
+                <span className="font-black tracking-[0.2em]">MINDER</span>
               </span>
             </Link>
 
-            {/* Navigation & Actions */}
-            <div className="flex items-center gap-3 md:gap-8 text-[10px] md:text-xs font-mono tracking-widest uppercase font-bold hw-accel">
-              
-              {/* Desktop Only Text Links */}
-              <div className="hidden lg:flex gap-6 items-center mr-4">
-                <Link href="#pricing"><span className="text-gray-400 hover:text-white transition-colors cursor-pointer">Pricing</span></Link>
-                <Link href="/legal"><span className="text-gray-400 hover:text-white transition-colors cursor-pointer">Legal</span></Link>
-              </div>
-              
-              {/* MINDER TACTICAL BADGE */}
-              <Link href="/minder" className="group shrink-0">
-                <span className="flex items-center justify-center gap-1.5 md:gap-2 text-pink-500 transition-colors border border-pink-500/50 bg-pink-900/20 px-3 md:px-4 py-1.5 md:py-2 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)]">
-                  <Crosshair className="w-3 h-3 md:w-4 md:h-4 animate-spin-slow-3d" /> 
-                  <span className="font-black hidden sm:inline">MINDER</span>
-                </span>
-              </Link>
-
-              {/* Dynamic Auth Buttons */}
-              {isLoggedIn ? (
-                <div className="flex items-center gap-2 md:gap-4 shrink-0">
-                  <Link href="/dashboard">
-                    <button className="flex items-center justify-center gap-2 bg-green-900/30 border border-green-500/50 text-green-400 px-3 md:px-4 py-1.5 md:py-2 rounded font-black shadow-[0_0_15px_rgba(34,197,94,0.2)]">
-                      <Terminal className="w-3 h-3 md:w-4 md:h-4" /> 
-                      <span className="hidden sm:inline">DASHBOARD</span>
-                    </button>
-                  </Link>
-                  <button onClick={handleLogout} className="flex items-center justify-center text-red-500 border border-red-500/30 px-3 py-1.5 md:py-2 rounded font-black">
-                    <Power className="w-3 h-3 md:w-4 md:h-4" />
-                    <span className="hidden sm:inline ml-2">LOGOUT</span>
+            {/* Dynamic Auth Buttons */}
+            {isLoggedIn ? (
+              <div className="flex items-center gap-2 md:gap-4 shrink-0">
+                <Link href="/dashboard">
+                  <button className="flex items-center justify-center gap-2 bg-green-900/30 border border-green-500/50 text-green-400 px-3 md:px-4 py-1.5 md:py-2 rounded font-black shadow-[0_0_15px_rgba(34,197,94,0.2)]">
+                    <Terminal className="w-3 h-3 md:w-4 md:h-4" /> 
+                    <span className="hidden sm:inline">DASHBOARD</span>
                   </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link href="/login" className="hidden sm:inline-block"><span className="text-gray-400 transition-colors cursor-pointer font-black">LOGIN</span></Link>
-                  <Link href="/login">
-                    <button className="bg-white text-black px-4 md:px-6 py-1.5 md:py-2 shadow-[0_0_20px_rgba(255,255,255,0.4)] rounded active:scale-95 font-black transition-transform">
-                      <span className="hidden sm:inline">ENROLL</span><span className="sm:hidden">LOGIN</span>
-                    </button>
-                  </Link>
-                </div>
-              )}
-            </div>
-        </nav>
+                </Link>
+                <button onClick={handleLogout} className="flex items-center justify-center text-red-500 border border-red-500/30 px-3 py-1.5 md:py-2 rounded font-black">
+                  <Power className="w-3 h-3 md:w-4 md:h-4" />
+                  <span className="hidden sm:inline ml-2">LOGOUT</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 shrink-0">
+                <Link href="/login" className="hidden sm:inline-block"><span className="text-gray-400 transition-colors cursor-pointer font-black">LOGIN</span></Link>
+                <Link href="/login">
+                  <button className="bg-white text-black px-4 md:px-6 py-1.5 md:py-2 shadow-[0_0_20px_rgba(255,255,255,0.4)] rounded active:scale-95 font-black transition-transform">
+                    <span className="hidden sm:inline">ENROLL</span><span className="sm:hidden">LOGIN</span>
+                  </button>
+                </Link>
+              </div>
+            )}
+          </div>
+      </nav>
+
+      <main className="bg-[#020205] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans relative hw-main">
 
         {/* --- CRAZY CINEMATIC HERO SECTION --- */}
         <section className="relative min-h-[100dvh] flex flex-col justify-center items-center pt-24 px-4 overflow-hidden hw-layer">
