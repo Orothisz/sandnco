@@ -4,7 +4,8 @@ import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion"
 import { useState, useEffect, useRef } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Siren, 
-  Terminal, ChevronRight, LogOut, Flame, Crosshair, Zap
+  Terminal, ChevronRight, LogOut, Flame, Crosshair, Zap,
+  Radar, Activity // <-- FIXED: Added missing icons causing the Vercel crash
 } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
