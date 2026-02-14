@@ -5,7 +5,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   ShieldAlert, Activity, Users, DollarSign, Terminal, Search, Check, X, Eye, 
   RefreshCw, Send, FileText, Crosshair, Upload, Image as ImageIcon, 
-  PlusSquare, Database, Trash2, Edit2, AlertCircle, HardDrive
+  PlusSquare, Database, Trash2, Edit2, AlertCircle, HardDrive, Lock
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -523,7 +523,7 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[9px] uppercase text-gray-500 font-bold tracking-widest mb-1 block">Age</label>
-                      <input type="number" required min={18} value={minderForm.age} onChange={e => setMinderForm({...minderForm, age: e.target.value})} className="w-full bg-[#050505] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-pink-500/50 transition-colors" placeholder="18+" />
+                      <input type="number" required min={13} value={minderForm.age} onChange={e => setMinderForm({...minderForm, age: e.target.value})} className="w-full bg-[#050505] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-pink-500/50 transition-colors" placeholder="13+" />
                     </div>
                     <div>
                       <label className="text-[9px] uppercase text-gray-500 font-bold tracking-widest mb-1 block">Instagram</label>
