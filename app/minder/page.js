@@ -371,27 +371,27 @@ export default function MinderHub() {
 // ------------------------------------------------------------------
 // STANDALONE RED FLAG ALGORITHM (Cleaned up for easy extraction)
 // ------------------------------------------------------------------
-export function useRedFlagAlgorithm(target) {
-  return useMemo(() => {
-    let score = 0;
-    const bio = target.bio?.toLowerCase() || '';
-    const alias = target.alias?.toLowerCase() || '';
+//export function useRedFlagAlgorithm(target) {
+//  return useMemo(() => {
+ //   let score = 0;
+ //   const bio = target.bio?.toLowerCase() || '';
+ //   const alias = target.alias?.toLowerCase() || '';
     
-    if (bio.length < 15) score += 20; 
-    if (bio.length > 250) score += 15;
+ //   if (bio.length < 15) score += 20; 
+ //   if (bio.length > 250) score += 15;
     
-    const flags = ['drama', 'crazy', 'ex', 'toxic', 'alpha', 'boss', 'manifest', 'crypto', 'nft', 'sugar', 'princess'];
-    score += flags.filter(kw => bio.includes(kw)).length * 12;
+//    const flags = ['drama', 'crazy', 'ex', 'toxic', 'alpha', 'boss', 'manifest', 'crypto', 'nft', 'sugar', 'princess'];
+//    score += flags.filter(kw => bio.includes(kw)).length * 12;
+ ////   
+ //   if (bio.includes('venmo') || bio.includes('cashapp')) score += 35;
+  //  if (bio.includes('nice guy') || bio.includes('good girl')) score += 25;
+  //  if (alias.includes('king') || alias.includes('queen') || alias.includes('official')) score += 15;
     
-    if (bio.includes('venmo') || bio.includes('cashapp')) score += 35;
-    if (bio.includes('nice guy') || bio.includes('good girl')) score += 25;
-    if (alias.includes('king') || alias.includes('queen') || alias.includes('official')) score += 15;
-    
-    const base = Math.min(Math.max(score, 1), 99);
-    const hash = target.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 12;
-    return Math.min(Math.max(base + hash, 1), 99);
-  }, [target]);
-}
+   // const base = Math.min(Math.max(score, 1), 99);
+   // const hash = target.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 12;
+   // return Math.min(Math.max(base + hash, 1), 99);
+ // }, [target]);
+//}
 
 // ------------------------------------------------------------------
 // HIGH-KINETIC PHYSICS COMPONENT (ABSOLUTE INSET)
