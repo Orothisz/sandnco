@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
-  ShieldAlert, Activity, Users, DollarSign, Terminal, Search, Check, X, Eye, Lock, 
-  RefreshCw, Send, FileText, AlertTriangle, Ban, Smartphone, Mail, MessageSquare,
-  Crosshair, Upload, Image as ImageIcon, PlusSquare, Database
+  ShieldAlert, Activity, Users, DollarSign, Terminal, Search, Check, X, Eye, 
+  RefreshCw, Send, FileText, Crosshair, Upload, Image as ImageIcon, 
+  PlusSquare, Database, Trash2, Edit2, AlertCircle, HardDrive
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -13,69 +13,81 @@ export default function AdminDashboard() {
   const supabase = createClientComponentClient();
   const fileInputRef = useRef(null);
   
+  // ==========================================
   // GLOBAL STATE
+  // ==========================================
   const [activeTab, setActiveTab] = useState("MISSIONS"); // 'MISSIONS' or 'MINDER'
   const [adminLog, setAdminLog] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, active: 0, revenue: 0, pending: 0, grid_count: 0 });
 
+  // ==========================================
   // MISSIONS STATE
+  // ==========================================
   const [requests, setRequests] = useState([]);
   const [filter, setFilter] = useState("ALL");
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [commsMessage, setCommsMessage] = useState("");
   const [sendingComms, setSendingComms] = useState(false);
 
-  // MINDER INJECTION STATE
+  // ==========================================
+  // MINDER GRID STATE (CRUD)
+  // ==========================================
+  const [minderTargets, setMinderTargets] = useState([]);
+  const [gridFilter, setGridFilter] = useState("");
   const [injecting, setInjecting] = useState(false);
-  const [minderForm, setMinderForm] = useState({
-    alias: "",
-    age: "",
-    bio: "",
-    instagram_id: "",
-    file: null,
-    preview: null
-  });
+  const [editingId, setEditingId] = useState(null); // Null = Insert, ID = Update
+  
+  const initialFormState = { alias: "", age: "", bio: "", instagram_id: "", file: null, preview: null, image_url: null };
+  const [minderForm, setMinderForm] = useState(initialFormState);
 
+  // --------------------------------------------------------------------------
   // 1. DATA INGESTION
+  // --------------------------------------------------------------------------
   const fetchIntel = async () => {
-    // Fetch Requests
+    // 1. Fetch Missions
     const { data: reqData, error: reqError } = await supabase
       .from("requests")
       .select("*")
       .order("created_at", { ascending: false });
 
-    // Fetch Minder Grid Count
-    const { count: gridCount } = await supabase
+    // 2. Fetch Minder Targets (For Grid Management)
+    const { data: targetsData, error: targetError } = await supabase
       .from("minder_targets")
-      .select("*", { count: 'exact', head: true });
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    if (!reqError) {
-      setRequests(reqData);
-      calculateStats(reqData, gridCount || 0);
+    if (!reqError && !targetError) {
+      setRequests(reqData || []);
+      setMinderTargets(targetsData || []);
+      calculateStats(reqData || [], targetsData?.length || 0);
       
+      // Keep selected request updated if data changes
       if (selectedRequest) {
         const updatedSelected = reqData.find(r => r.id === selectedRequest.id);
         if (updatedSelected) setSelectedRequest(updatedSelected);
       }
     } else {
-      console.error("Intel Fetch Failed:", reqError);
+      sysLog("ERR", "FATAL: INTEL FETCH FAILED. CHECK UPLINK.");
     }
     setLoading(false);
   };
 
+  // --------------------------------------------------------------------------
   // 2. REALTIME SURVEILLANCE
+  // --------------------------------------------------------------------------
   useEffect(() => {
     fetchIntel();
+    sysLog("SYS", "SECURE OVERWATCH TERMINAL INITIALIZED.");
 
     const channel = supabase
       .channel('god-mode-feed')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, (payload) => {
-          addLog(`SIGNAL: REQUEST UPDATE ON ID #${payload.new.id || payload.old.id}`);
+          sysLog("NET", `MISSION DATA MUTATED: ID #${payload.new.id || payload.old.id}`);
           fetchIntel(); 
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'minder_targets' }, (payload) => {
-          addLog(`SIGNAL: NEW TARGET ADDED TO MINDER GRID [${payload.new.alias}]`);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'minder_targets' }, (payload) => {
+          sysLog("NET", `GRID ARCHITECTURE MUTATED. REFRESHING.`);
           fetchIntel();
       })
       .subscribe();
@@ -83,7 +95,9 @@ export default function AdminDashboard() {
     return () => supabase.removeChannel(channel);
   }, [supabase]);
 
-  // 3. LOGIC KERNEL
+  // --------------------------------------------------------------------------
+  // 3. LOGIC KERNEL & TERMINAL
+  // --------------------------------------------------------------------------
   const calculateStats = (data, gridCount) => {
     const active = data.filter(r => r.status === 'ACTIVE').length;
     const pending = data.filter(r => r.status === 'PENDING').length;
@@ -100,25 +114,33 @@ export default function AdminDashboard() {
     setStats({ total: data.length, active, pending, revenue, grid_count: gridCount });
   };
 
-  const addLog = (msg) => {
-    const timestamp = new Date().toLocaleTimeString('en-GB');
-    setAdminLog(prev => [`[${timestamp}] ${msg}`, ...prev].slice(0, 50));
+  const sysLog = (type, msg) => {
+    const timestamp = new Date().toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
+    let colorClass = "text-gray-500";
+    if (type === "ERR") colorClass = "text-red-500";
+    if (type === "CMD") colorClass = "text-emerald-400";
+    if (type === "NET") colorClass = "text-blue-400";
+    if (type === "SYS") colorClass = "text-gray-300";
+
+    setAdminLog(prev => [{ id: Date.now()+Math.random(), time: timestamp, type, msg, colorClass }, ...prev].slice(0, 50));
   };
 
-  // 4. MISSIONS: COMMAND EXECUTION
+  // --------------------------------------------------------------------------
+  // 4. MISSIONS COMMAND EXECUTION
+  // --------------------------------------------------------------------------
   const updateStatus = async (id, newStatus, e) => {
     if (e) e.stopPropagation();
     
+    // Optimistic UI
     setRequests(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
     if (selectedRequest?.id === id) setSelectedRequest(prev => ({ ...prev, status: newStatus }));
 
     const { error } = await supabase.from("requests").update({ status: newStatus }).eq("id", id);
-    
     if (error) {
-        addLog(`ERROR: COMMAND FAILED ON ID #${id}`);
+        sysLog("ERR", `COMMAND OVERRIDE FAILED ON ID #${id}`);
         fetchIntel(); 
     } else {
-        addLog(`COMMAND EXECUTED: ID #${id} STATUS -> ${newStatus}`);
+        sysLog("CMD", `STATUS OVERRIDE EXECUTED: ID #${id} -> ${newStatus}`);
     }
   };
 
@@ -126,490 +148,468 @@ export default function AdminDashboard() {
     if (!commsMessage.trim() || !selectedRequest) return;
     setSendingComms(true);
 
-    const { error } = await supabase
-        .from("requests")
-        .update({ latest_update: commsMessage })
-        .eq("id", selectedRequest.id);
+    const { error } = await supabase.from("requests").update({ latest_update: commsMessage }).eq("id", selectedRequest.id);
     
     if (!error) {
-        addLog(`INTEL TRANSMITTED TO AGENT #${selectedRequest.id}`);
+        sysLog("CMD", `ENCRYPTED COMMS TRANSMITTED TO AGENT #${selectedRequest.id}`);
         setCommsMessage(""); 
     } else {
-        addLog(`TRANSMISSION FAILED: ${error.message}`);
+        sysLog("ERR", `TRANSMISSION FAILED: ${error.message}`);
     }
     setSendingComms(false);
   };
 
-  // 5. MINDER: GRID INJECTION LOGIC
+  // --------------------------------------------------------------------------
+  // 5. MINDER GRID MANAGEMENT (CRUD)
+  // --------------------------------------------------------------------------
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setMinderForm({
-        ...minderForm,
-        file: file,
-        preview: URL.createObjectURL(file)
-      });
+    if (file) setMinderForm({ ...minderForm, file: file, preview: URL.createObjectURL(file) });
+  };
+
+  const initiateEdit = (target) => {
+    setEditingId(target.id);
+    setMinderForm({
+      alias: target.alias,
+      age: target.age.toString(),
+      bio: target.bio,
+      instagram_id: target.instagram_id,
+      file: null,
+      preview: target.image_url,
+      image_url: target.image_url
+    });
+    sysLog("SYS", `EDIT MODE LOCKED ON DOSSIER: ${target.alias}`);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setMinderForm(initialFormState);
+    sysLog("SYS", "EDIT MODE DISENGAGED. REVERTED TO INSERT PROTOCOL.");
+  };
+
+  const handlePurgeTarget = async (id, alias) => {
+    const confirm = window.confirm(`WARNING: PURGING DOSSIER [${alias}]. THIS IRREVERSIBLY ALTERS THE GRID. PROCEED?`);
+    if (!confirm) return;
+
+    sysLog("CMD", `INITIATING PURGE SEQUENCE FOR ID: ${id}`);
+    const { error } = await supabase.from('minder_targets').delete().eq('id', id);
+    
+    if (error) {
+      sysLog("ERR", `PURGE FAILED: ${error.message}`);
+    } else {
+      sysLog("CMD", `DOSSIER [${alias}] PERMANENTLY PURGED FROM GRID.`);
+      fetchIntel();
+      if (editingId === id) cancelEdit();
     }
   };
 
-  const handleInjectTarget = async (e) => {
+  const handleUpsertTarget = async (e) => {
     e.preventDefault();
-    if (!minderForm.file || !minderForm.alias || !minderForm.age) {
-      return addLog("ERROR: INCOMPLETE INTEL FOR GRID INJECTION.");
+    if ((!minderForm.file && !minderForm.image_url) || !minderForm.alias || !minderForm.age) {
+      return sysLog("ERR", "INCOMPLETE INTEL. INJECTION ABORTED.");
     }
 
     setInjecting(true);
-    addLog("UPLOADING ASSET TO MINDER BUCKET...");
+    sysLog("CMD", editingId ? `INITIATING OVERRIDE ON DOSSIER: ${minderForm.alias}` : "COMPILING NEW DOSSIER FOR GRID INJECTION...");
 
     try {
-      // 1. Upload Image (Admin Bypasses Gemini)
-      const fileExt = minderForm.file.name.split('.').pop();
-      const fileName = `admin-inject-${Date.now()}.${fileExt}`;
+      let finalImageUrl = minderForm.image_url;
 
-      const { error: uploadError } = await supabase.storage
-        .from('minder_assets')
-        .upload(fileName, minderForm.file);
+      // 1. Upload new image if provided
+      if (minderForm.file) {
+        const fileExt = minderForm.file.name.split('.').pop();
+        const fileName = `admin-inject-${Date.now()}.${fileExt}`;
 
-      if (uploadError) throw uploadError;
+        const { error: uploadError } = await supabase.storage.from('minder_assets').upload(fileName, minderForm.file);
+        if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage
-        .from('minder_assets')
-        .getPublicUrl(fileName);
+        const { data: publicUrlData } = supabase.storage.from('minder_assets').getPublicUrl(fileName);
+        finalImageUrl = publicUrlData.publicUrl;
+      }
 
-      // 2. Insert Record
-      const { error: dbError } = await supabase.from('minder_targets').insert([{
+      const payload = {
         alias: minderForm.alias,
         age: parseInt(minderForm.age),
         bio: minderForm.bio,
         instagram_id: minderForm.instagram_id.replace('@', ''),
-        image_url: publicUrlData.publicUrl,
-        entity_type: 'human' // Can be anything, Admin has God Mode
-      }]);
+        image_url: finalImageUrl,
+        entity_type: 'human'
+      };
 
-      if (dbError) throw dbError;
+      // 2. Insert or Update
+      if (editingId) {
+        const { error } = await supabase.from('minder_targets').update(payload).eq('id', editingId);
+        if (error) throw error;
+        sysLog("SUCCESS", `DOSSIER [${minderForm.alias}] OVERWRITTEN SUCCESSFULLY.`);
+      } else {
+        const { error } = await supabase.from('minder_targets').insert([payload]);
+        if (error) throw error;
+        sysLog("SUCCESS", `DOSSIER [${minderForm.alias}] INJECTED INTO LIVE GRID.`);
+      }
 
-      addLog(`SUCCESS: TARGET [${minderForm.alias}] INJECTED INTO LIVE GRID.`);
-      
-      // Reset Form
-      setMinderForm({ alias: '', age: '', bio: '', instagram_id: '', file: null, preview: null });
+      setMinderForm(initialFormState);
+      setEditingId(null);
       fetchIntel();
 
     } catch (err) {
-      console.error(err);
-      addLog(`INJECTION FAILED: ${err.message}`);
+      sysLog("ERR", `OPERATION FAILED: ${err.message}`);
     }
     setInjecting(false);
   };
 
+  // --------------------------------------------------------------------------
+  // RENDER HELPERS
+  // --------------------------------------------------------------------------
   const filteredRequests = requests.filter(r => filter === "ALL" || r.status === filter);
+  const searchedTargets = minderTargets.filter(t => t.alias.toLowerCase().includes(gridFilter.toLowerCase()) || t.instagram_id.toLowerCase().includes(gridFilter.toLowerCase()));
 
   return (
-    <div className="min-h-screen bg-black text-green-500 font-mono p-4 md:p-6 selection:bg-green-900 selection:text-white overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-[#050505] text-[#ededed] font-mono selection:bg-emerald-900 selection:text-white flex flex-col">
       
-      {/* HEADER */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-green-900/50 pb-6 gap-4">
+      {/* --------------------------------------------------------------------- */}
+      {/* TOP COMMAND BAR */}
+      {/* --------------------------------------------------------------------- */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center px-6 py-5 border-b border-white/10 bg-[#0a0a0a] gap-4 shrink-0">
         <div>
-          <h1 className="text-3xl font-black uppercase tracking-tighter flex items-center gap-3 glitch-text">
-            <ShieldAlert className="w-8 h-8 animate-pulse text-red-600" />
-            GOD_MODE // <span className="text-white">OVERWATCH</span>
+          <h1 className="text-2xl font-black uppercase tracking-[0.2em] flex items-center gap-3 text-white">
+            <Terminal className="w-6 h-6 text-emerald-500" /> OVERWATCH_TERMINAL
           </h1>
-          <p className="text-xs text-gray-500 mt-2 font-bold tracking-widest">
-            SECURE CONNECTION ESTABLISHED: ADMIN@SANDNCO.LOL
+          <p className="text-[10px] text-gray-500 mt-1 font-bold tracking-widest flex items-center gap-2">
+            <Lock className="w-3 h-3" /> SECURE ROOT ACCESS: ADMIN@SANDNCO.LOL
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <button onClick={fetchIntel} className="p-3 border border-green-900/30 hover:bg-green-900/20 rounded transition-all active:scale-95 group">
-            <RefreshCw className={`w-5 h-5 group-hover:rotate-180 transition-transform ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <div className="bg-red-900/10 text-red-500 px-4 py-2 rounded text-xs font-bold border border-red-500/30 animate-pulse flex items-center gap-2">
-            <div className="w-2 h-2 bg-red-500 rounded-full" /> LIVE FEED
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="flex-1 md:flex-none flex items-center gap-1 bg-white/5 border border-white/10 p-1 rounded-sm">
+             <button onClick={() => setActiveTab("MISSIONS")} className={`flex-1 md:flex-none px-6 py-2 text-[10px] font-black tracking-widest uppercase transition-colors ${activeTab === 'MISSIONS' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'text-gray-500 hover:text-white border border-transparent'}`}>
+               MISSIONS
+             </button>
+             <button onClick={() => setActiveTab("MINDER")} className={`flex-1 md:flex-none px-6 py-2 text-[10px] font-black tracking-widest uppercase transition-colors ${activeTab === 'MINDER' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/30' : 'text-gray-500 hover:text-white border border-transparent'}`}>
+               MINDER GRID
+             </button>
           </div>
+          <button onClick={fetchIntel} className="p-2 border border-white/10 hover:bg-white/5 transition-all text-gray-400 hover:text-white flex shrink-0">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </header>
 
-      {/* TACTICAL TAB SWITCHER */}
-      <div className="flex gap-4 mb-6">
-         <button 
-           onClick={() => setActiveTab("MISSIONS")}
-           className={`px-6 py-2 text-xs font-black tracking-widest uppercase transition-all flex items-center gap-2 ${activeTab === 'MISSIONS' ? 'bg-green-600 text-black shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-green-900/10 text-green-600 border border-green-900/50 hover:bg-green-900/30'}`}
-         >
-           <FileText className="w-4 h-4" /> MISSIONS
-         </button>
-         <button 
-           onClick={() => setActiveTab("MINDER")}
-           className={`px-6 py-2 text-xs font-black tracking-widest uppercase transition-all flex items-center gap-2 ${activeTab === 'MINDER' ? 'bg-pink-600 text-white shadow-[0_0_15px_rgba(219,39,119,0.4)]' : 'bg-pink-900/10 text-pink-600 border border-pink-900/50 hover:bg-pink-900/30'}`}
-         >
-           <Database className="w-4 h-4" /> MINDER GRID
-         </button>
+      {/* --------------------------------------------------------------------- */}
+      {/* STATS STRIP */}
+      {/* --------------------------------------------------------------------- */}
+      <div className="grid grid-cols-2 md:grid-cols-4 border-b border-white/10 shrink-0 bg-[#080808]">
+        <StatBlock label="TOTAL DOSSIERS" value={stats.total} />
+        <StatBlock label="ACTIVE MISSIONS" value={stats.active} accent="text-amber-400" />
+        <StatBlock label="EST. REVENUE (WAIVED)" value={`₹${stats.revenue}`} />
+        <StatBlock label="GRID POPULATION" value={stats.grid_count} accent="text-pink-400" />
       </div>
 
-      {/* STATS GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatsCard label="TOTAL DOSSIERS" value={stats.total} icon={<Users className="w-5 h-5" />} />
-        <StatsCard label="ACTIVE MISSIONS" value={stats.active} icon={<Activity className="w-5 h-5 text-red-500" />} color="text-red-500" />
-        <StatsCard label="REVENUE (WAIVED)" value={`₹${stats.revenue.toLocaleString()}`} icon={<DollarSign className="w-5 h-5" />} />
-        <StatsCard label="MINDER TARGETS" value={stats.grid_count} icon={<Crosshair className="w-5 h-5 text-pink-500" />} color="text-pink-500" />
-      </div>
-
-      {/* ========================================================= */}
-      {/* TAB 1: MISSIONS CONSOLE                                   */}
-      {/* ========================================================= */}
-      {activeTab === "MISSIONS" && (
-        <div className="flex-1 flex gap-6 overflow-hidden relative min-h-[500px]">
-          
-          {/* LEFT PANEL: TABLE */}
-          <div className={`flex-1 bg-[#050505] border border-green-900/30 rounded-lg overflow-hidden flex flex-col transition-all duration-300 ${selectedRequest ? 'w-2/3 hidden md:flex' : 'w-full'}`}>
-            <div className="p-4 border-b border-green-900/30 flex flex-wrap gap-4 items-center justify-between bg-green-900/5">
-              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      {/* --------------------------------------------------------------------- */}
+      {/* WORKSPACE AREA */}
+      {/* --------------------------------------------------------------------- */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        
+        {/* ========================================================= */}
+        {/* TAB 1: MISSIONS CONSOLE                                   */}
+        {/* ========================================================= */}
+        {activeTab === "MISSIONS" && (
+          <div className="flex-1 flex overflow-hidden">
+            
+            {/* MISSIONS DATATABLE */}
+            <div className={`flex-1 border-r border-white/10 flex flex-col bg-[#050505] transition-all duration-300 ${selectedRequest ? 'hidden lg:flex lg:w-2/3' : 'w-full'}`}>
+              <div className="p-3 border-b border-white/10 bg-[#0a0a0a] flex gap-2 overflow-x-auto no-scrollbar">
                 {["ALL", "PENDING", "ACTIVE", "COMPLETED", "REJECTED"].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-4 py-1.5 text-[10px] font-bold uppercase rounded border transition-all whitespace-nowrap ${
-                      filter === f 
-                        ? "bg-green-500 text-black border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]" 
-                        : "bg-transparent border-green-900/50 text-gray-500 hover:border-green-500/50 hover:text-green-400"
-                    }`}
-                  >
+                  <button key={f} onClick={() => setFilter(f)} className={`px-4 py-1.5 text-[9px] font-bold uppercase border transition-colors whitespace-nowrap ${filter === f ? "bg-white text-black border-white" : "bg-transparent border-white/10 text-gray-500 hover:text-white"}`}>
                     {f}
                   </button>
                 ))}
               </div>
+
+              <div className="flex-1 overflow-auto custom-scrollbar">
+                <table className="w-full text-left text-[10px]">
+                  <thead className="bg-[#0a0a0a] text-gray-500 uppercase tracking-widest sticky top-0 z-10 border-b border-white/10 shadow-sm">
+                    <tr>
+                      <th className="p-4 font-normal">Status</th>
+                      <th className="p-4 font-normal">Ident / Timestamp</th>
+                      <th className="p-4 font-normal">Operative</th>
+                      <th className="p-4 font-normal">Objective</th>
+                      <th className="p-4 font-normal text-right">Execute</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {filteredRequests.map((req) => (
+                      <motion.tr 
+                        key={req.id} 
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                        onClick={() => setSelectedRequest(req)}
+                        className={`cursor-pointer transition-colors group ${selectedRequest?.id === req.id ? 'bg-white/5' : 'hover:bg-white/[0.02]'}`}
+                      >
+                        <td className="p-4"><StatusIndicator status={req.status} /></td>
+                        <td className="p-4 font-mono text-gray-500">
+                          <span className="text-gray-300">#{req.id.split('-')[0]}</span><br/>
+                          <span className="text-[8px] opacity-50">{new Date(req.created_at).toLocaleDateString()}</span>
+                        </td>
+                        <td className="p-4 text-gray-400 truncate max-w-[120px]">{req.user_email?.split('@')[0] || "Unknown"}</td>
+                        <td className="p-4">
+                          <div className="text-gray-200 uppercase font-bold truncate max-w-[150px]">{req.target_name}</div>
+                          <div className="text-[9px] text-gray-600 uppercase mt-0.5">{req.service_type}</div>
+                        </td>
+                        <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                            {req.status === 'PENDING' && (
+                              <>
+                                <ActionIcon onClick={(e) => updateStatus(req.id, 'ACTIVE', e)} icon={<Check className="w-3 h-3" />} hover="hover:text-emerald-400 hover:bg-emerald-400/10" />
+                                <ActionIcon onClick={(e) => updateStatus(req.id, 'REJECTED', e)} icon={<X className="w-3 h-3" />} hover="hover:text-red-400 hover:bg-red-400/10" />
+                              </>
+                            )}
+                            <ActionIcon onClick={() => setSelectedRequest(req)} icon={<Eye className="w-3 h-3" />} hover="hover:text-blue-400 hover:bg-blue-400/10" />
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredRequests.length === 0 && <div className="p-20 text-center text-gray-700 text-xs font-bold tracking-widest uppercase">NO DATA IN SECTOR.</div>}
+              </div>
             </div>
 
-            <div className="flex-1 overflow-auto custom-scrollbar">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-green-900/10 text-gray-400 uppercase tracking-widest sticky top-0 backdrop-blur-sm z-10">
-                  <tr>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">ID / Created</th>
-                    <th className="p-4">Operative</th>
-                    <th className="p-4">Target / Obj</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-green-900/20">
-                  {filteredRequests.map((req) => (
-                    <motion.tr 
-                      key={req.id} 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      onClick={() => setSelectedRequest(req)}
-                      className={`cursor-pointer transition-colors group ${selectedRequest?.id === req.id ? 'bg-green-900/20 border-l-2 border-green-500' : 'hover:bg-green-900/5 border-l-2 border-transparent'}`}
-                    >
-                      <td className="p-4"><StatusBadge status={req.status} /></td>
-                      <td className="p-4 font-mono text-gray-500">
-                        <span className="text-white font-bold">#{req.id}</span>
-                        <div className="text-[10px] mt-1">{new Date(req.created_at).toLocaleDateString()}</div>
-                      </td>
-                      <td className="p-4">
-                        <div className="text-gray-300 font-bold truncate max-w-[120px]">{req.user_email?.split('@')[0] || "Unknown"}</div>
-                      </td>
-                      <td className="p-4">
-                        <div className="text-white font-bold uppercase truncate max-w-[150px]">{req.target_name}</div>
-                        <div className="text-[10px] text-gray-500 uppercase">{req.service_type}</div>
-                      </td>
-                      <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-2">
-                          {req.status === 'PENDING' && (
-                            <>
-                              <ActionButton onClick={(e) => updateStatus(req.id, 'ACTIVE', e)} icon={<Check className="w-3 h-3" />} color="text-green-500" bg="bg-green-900/20" border="border-green-500/50" />
-                              <ActionButton onClick={(e) => updateStatus(req.id, 'REJECTED', e)} icon={<X className="w-3 h-3" />} color="text-red-500" bg="bg-red-900/20" border="border-red-500/50" />
-                            </>
-                          )}
-                          <ActionButton onClick={() => setSelectedRequest(req)} icon={<Eye className="w-3 h-3" />} color="text-blue-400" bg="bg-blue-900/20" border="border-blue-500/50" />
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredRequests.length === 0 && (
-                <div className="p-20 text-center text-gray-600 font-mono flex flex-col items-center">
-                  <Search className="w-12 h-12 mb-4 opacity-20" />
-                  NO DATA FOUND IN THIS SECTOR.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT PANEL: DOSSIER INSPECTOR */}
-          <AnimatePresence>
-            {selectedRequest && (
-              <motion.div 
-                initial={{ x: 300, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 300, opacity: 0 }}
-                className="w-full md:w-[450px] bg-[#080808] border border-green-900/50 rounded-lg flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.8)] absolute md:relative inset-0 z-20"
-              >
-                <div className="p-6 border-b border-green-900/30 flex justify-between items-start bg-green-900/5">
-                  <div>
-                     <h2 className="text-xl font-black text-white uppercase flex items-center gap-2">
-                       <FileText className="w-5 h-5 text-green-500" />
-                       MISSION #{selectedRequest.id}
-                     </h2>
-                     <p className="text-[10px] text-gray-500 font-mono mt-1 uppercase">
-                       SECURE FILE // {selectedRequest.service_type}
-                     </p>
+            {/* MISSION INSPECTOR PANEL */}
+            <AnimatePresence>
+              {selectedRequest && (
+                <motion.div initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 100, opacity: 0 }} className="w-full lg:w-[400px] bg-[#080808] flex flex-col absolute lg:relative inset-0 z-20">
+                  <div className="p-5 border-b border-white/10 flex justify-between items-start bg-[#0a0a0a]">
+                    <div>
+                       <h2 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
+                         <FileText className="w-4 h-4 text-gray-500" /> DOSSIER #{selectedRequest.id.split('-')[0]}
+                       </h2>
+                       <p className="text-[9px] text-gray-500 mt-1 uppercase tracking-widest">{selectedRequest.service_type}</p>
+                    </div>
+                    <button onClick={() => setSelectedRequest(null)} className="text-gray-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
                   </div>
-                  <button onClick={() => setSelectedRequest(null)} className="text-gray-500 hover:text-white">
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                  {/* STATUS */}
-                  <div className="bg-black border border-gray-800 p-4 rounded">
-                    <label className="text-[10px] text-gray-500 uppercase font-bold tracking-widest block mb-3">Mission Status</label>
-                    <div className="grid grid-cols-2 gap-2">
-                       {['PENDING', 'ACTIVE', 'COMPLETED', 'REJECTED'].map(s => (
-                         <button 
-                           key={s}
-                           onClick={() => updateStatus(selectedRequest.id, s)}
-                           className={`text-xs py-2 px-2 border rounded font-bold transition-all ${selectedRequest.status === s ? 'bg-white text-black border-white' : 'bg-transparent text-gray-600 border-gray-800 hover:border-gray-500'}`}
-                         >
-                           {s}
-                         </button>
-                       ))}
+                  <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar text-xs">
+                    {/* Status Controller */}
+                    <div>
+                      <label className="text-[9px] text-gray-500 uppercase font-bold tracking-widest block mb-3 border-b border-white/10 pb-2">Mission Status</label>
+                      <div className="grid grid-cols-2 gap-2">
+                         {['PENDING', 'ACTIVE', 'COMPLETED', 'REJECTED'].map(s => (
+                           <button key={s} onClick={() => updateStatus(selectedRequest.id, s)} className={`py-2 px-2 text-[9px] font-black uppercase tracking-widest border transition-all ${selectedRequest.status === s ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-white/10 hover:border-white/30 hover:text-gray-300'}`}>
+                             {s}
+                           </button>
+                         ))}
+                      </div>
+                    </div>
+
+                    {/* Comms Panel */}
+                    <div>
+                       <label className="text-[9px] text-gray-500 uppercase font-bold tracking-widest block mb-3 border-b border-white/10 pb-2 flex items-center gap-2">
+                          <Terminal className="w-3 h-3" /> Secure Comms Uplink
+                       </label>
+                       {selectedRequest.latest_update && (
+                         <div className="mb-4 bg-emerald-500/5 border border-emerald-500/20 p-3 text-[10px] text-emerald-400 font-mono">
+                            <span className="block text-[8px] text-emerald-600 mb-1">LATEST TRANSMISSION:</span>
+                            {selectedRequest.latest_update}
+                         </div>
+                       )}
+                       <div className="bg-[#050505] border border-white/10 p-1 flex flex-col focus-within:border-emerald-500/50 transition-colors">
+                          <textarea 
+                            value={commsMessage} onChange={(e) => setCommsMessage(e.target.value)}
+                            className="w-full bg-transparent text-[10px] text-gray-300 p-2 focus:outline-none resize-none placeholder:text-gray-700 custom-scrollbar"
+                            rows="4" placeholder="Enter status update to transmit to operative..."
+                          />
+                          <button onClick={sendIntelUpdate} disabled={sendingComms || !commsMessage.trim()} className="self-end m-1 bg-white hover:bg-gray-200 text-black text-[9px] font-black tracking-widest px-4 py-2 disabled:opacity-50 flex items-center gap-2">
+                            {sendingComms ? 'UPLOADING...' : 'TRANSMIT'} <Send className="w-3 h-3" />
+                          </button>
+                       </div>
+                    </div>
+
+                    {/* Target Intel */}
+                    <div>
+                       <label className="text-[9px] text-gray-500 uppercase font-bold tracking-widest block mb-3 border-b border-white/10 pb-2">Target Intelligence</label>
+                       <div className="space-y-4">
+                          <div>
+                            <span className="text-[9px] text-gray-600 block tracking-widest uppercase">Target Name</span>
+                            <span className="text-sm text-gray-200 font-bold tracking-wider">{selectedRequest.target_name}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-gray-600 block tracking-widest uppercase mb-1">Briefing Notes</span>
+                            <p className="text-[10px] text-gray-400 bg-white/5 p-3 border border-white/5 leading-relaxed break-words">
+                              {selectedRequest.additional_details || "No additional intel provided."}
+                            </p>
+                          </div>
+                       </div>
                     </div>
                   </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
-                  {/* COMMS */}
-                  <div>
-                     <label className="text-[10px] text-green-500 uppercase font-bold tracking-widest block mb-2 border-b border-green-900/30 pb-1 flex items-center gap-2">
-                        <MessageSquare className="w-3 h-3" /> Direct Comms Uplink
-                     </label>
-                     {selectedRequest.latest_update && (
-                       <div className="mb-4 bg-green-900/10 border border-green-500/20 p-3 rounded text-xs text-green-400 font-mono">
-                          <span className="block text-[10px] text-green-600 mb-1 opacity-70">LATEST TRANSMISSION:</span>
-                          "{selectedRequest.latest_update}"
-                       </div>
-                     )}
-                     <div className="bg-black border border-green-900/50 rounded p-3">
-                        <textarea 
-                          value={commsMessage}
-                          onChange={(e) => setCommsMessage(e.target.value)}
-                          className="w-full bg-transparent text-xs text-green-400 font-mono focus:outline-none resize-none placeholder:text-green-900"
-                          rows="3"
-                          placeholder="TYPE INTEL UPDATE FOR AGENT..."
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              sendIntelUpdate();
-                            }
-                          }}
-                        ></textarea>
-                        <div className="flex justify-between items-center mt-2 border-t border-green-900/30 pt-2">
-                          <span className="text-[10px] text-green-700 animate-pulse">● SECURE LINE OPEN</span>
-                          <button 
-                            onClick={sendIntelUpdate}
-                            disabled={sendingComms || !commsMessage.trim()}
-                            className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-black text-xs font-bold px-4 py-1 rounded flex items-center gap-2"
-                          >
-                            {sendingComms ? 'SENDING...' : 'TRANSMIT'} <Send className="w-3 h-3" />
-                          </button>
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* TARGET INTEL */}
-                  <div>
-                     <label className="text-[10px] text-green-500 uppercase font-bold tracking-widest block mb-2 border-b border-green-900/30 pb-1">Target Intelligence</label>
-                     <div className="space-y-4">
-                        <div>
-                          <span className="text-xs text-gray-500 block">TARGET NAME</span>
-                          <span className="text-lg text-white font-bold">{selectedRequest.target_name}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs text-gray-500 block">BRIEFING NOTES</span>
-                          <p className="text-sm text-gray-300 font-mono bg-gray-900/50 p-3 rounded border border-gray-800 leading-relaxed break-words">
-                            "{selectedRequest.additional_details || "No additional intelligence provided."}"
-                          </p>
-                        </div>
-                     </div>
-                  </div>
+        {/* ========================================================= */}
+        {/* TAB 2: MINDER GRID MANAGEMENT (CRUD)                        */}
+        {/* ========================================================= */}
+        {activeTab === "MINDER" && (
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-[#050505]">
+            
+            {/* LEFT: GRID DATABASE VIEWER */}
+            <div className="flex-1 border-r border-white/10 flex flex-col overflow-hidden">
+              <div className="p-4 border-b border-white/10 bg-[#0a0a0a] flex items-center gap-3">
+                <Database className="w-4 h-4 text-pink-500" />
+                <h2 className="text-xs font-black text-white uppercase tracking-[0.2em]">GRID DATABASE</h2>
+                <div className="ml-auto relative flex items-center">
+                  <Search className="w-3 h-3 absolute left-3 text-gray-600" />
+                  <input type="text" value={gridFilter} onChange={e => setGridFilter(e.target.value)} placeholder="Search alias or ID..." className="bg-white/5 border border-white/10 py-1.5 pl-8 pr-3 text-[10px] text-white focus:outline-none focus:border-pink-500/50 w-48 transition-all placeholder:text-gray-700" />
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
+              </div>
 
-      {/* ========================================================= */}
-      {/* TAB 2: MINDER GRID INJECTION                              */}
-      {/* ========================================================= */}
-      {activeTab === "MINDER" && (
-        <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden min-h-[500px]">
-          
-          {/* LEFT: INJECTION FORM */}
-          <div className="flex-1 bg-[#050505] border border-pink-900/30 rounded-lg overflow-y-auto p-6 custom-scrollbar">
-            <div className="flex items-center gap-3 mb-6 border-b border-pink-900/30 pb-4">
-              <Crosshair className="w-6 h-6 text-pink-500" />
-              <div>
-                <h2 className="text-xl font-black text-white uppercase tracking-widest">GRID INJECTION</h2>
-                <p className="text-[10px] text-pink-500 font-mono">WARNING: ADMIN OVERRIDE ENGAGED. BIOMETRIC SCANS BYPASSED.</p>
+              <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {searchedTargets.map(target => (
+                    <div key={target.id} className={`bg-[#0a0a0a] border p-4 flex flex-col gap-4 relative group transition-all ${editingId === target.id ? 'border-pink-500/50 shadow-[0_0_20px_rgba(219,39,119,0.1)]' : 'border-white/10 hover:border-white/30'}`}>
+                      <div className="flex items-center gap-4">
+                        <img src={target.image_url} className="w-12 h-12 rounded-full object-cover border border-white/20 grayscale group-hover:grayscale-0 transition-all" alt="Target" />
+                        <div className="flex-1 min-w-0">
+                           <h3 className="text-sm font-black text-gray-200 uppercase truncate">{target.alias} <span className="text-gray-600 text-xs font-normal">{target.age}</span></h3>
+                           <p className="text-[9px] text-pink-500 tracking-widest font-bold truncate">@{target.instagram_id}</p>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-500 line-clamp-2 italic">"{target.bio}"</p>
+                      <div className="mt-auto pt-3 border-t border-white/5 flex justify-end gap-2">
+                        <button onClick={() => initiateEdit(target)} className="text-gray-500 hover:text-white text-[9px] font-bold tracking-widest flex items-center gap-1 uppercase p-1"><Edit2 className="w-3 h-3"/> Edit</button>
+                        <button onClick={() => handlePurgeTarget(target.id, target.alias)} className="text-gray-600 hover:text-red-500 text-[9px] font-bold tracking-widest flex items-center gap-1 uppercase p-1"><Trash2 className="w-3 h-3"/> Purge</button>
+                      </div>
+                    </div>
+                  ))}
+                  {searchedTargets.length === 0 && <div className="col-span-full py-20 text-center text-[10px] text-gray-600 font-bold uppercase tracking-widest">NO RECORDS MATCH QUERY.</div>}
+                </div>
               </div>
             </div>
 
-            <form onSubmit={handleInjectTarget} className="space-y-6 max-w-xl">
-              
-              {/* IMAGE UPLOAD */}
-              <div className="flex items-end gap-4">
-                 <div 
-                   onClick={() => fileInputRef.current?.click()}
-                   className={`w-32 h-32 rounded border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden ${minderForm.preview ? 'border-pink-500 bg-black' : 'border-gray-700 hover:border-pink-500 hover:bg-pink-900/10'}`}
-                 >
-                   {minderForm.preview ? (
-                     <img src={minderForm.preview} className="w-full h-full object-cover opacity-80" alt="Preview" />
-                   ) : (
-                     <>
-                       <ImageIcon className="w-6 h-6 text-gray-500 mb-2" />
-                       <span className="text-[9px] font-bold text-gray-500">UPLOAD INTEL</span>
-                     </>
-                   )}
+            {/* RIGHT: INJECTION / EDIT FORM */}
+            <div className="w-full md:w-[400px] bg-[#080808] flex flex-col shrink-0 overflow-y-auto custom-scrollbar border-t md:border-t-0 border-white/10 relative">
+              <div className="p-5 border-b border-white/10 bg-[#0a0a0a] sticky top-0 z-10 flex justify-between items-center">
+                 <div>
+                   <h2 className="text-sm font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
+                     <Crosshair className={`w-4 h-4 ${editingId ? 'text-blue-500' : 'text-pink-500'}`} /> 
+                     {editingId ? 'DOSSIER OVERRIDE' : 'NEW INJECTION'}
+                   </h2>
                  </div>
-                 <input type="file" ref={fileInputRef} onChange={handleImageSelect} className="hidden" accept="image/*" />
-                 <div className="flex-1 space-y-2">
-                    <label className="text-[10px] uppercase text-gray-500 font-bold tracking-widest">Target Alias</label>
-                    <input 
-                      type="text" required value={minderForm.alias} 
-                      onChange={e => setMinderForm({...minderForm, alias: e.target.value})}
-                      className="w-full bg-black border border-gray-800 p-3 text-sm text-white focus:outline-none focus:border-pink-500" 
-                      placeholder="e.g. Operation Honeypot" 
-                    />
-                 </div>
+                 {editingId && <button onClick={cancelEdit} className="text-gray-500 hover:text-white"><X className="w-4 h-4"/></button>}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <label className="text-[10px] uppercase text-gray-500 font-bold tracking-widest">Age</label>
-                    <input 
-                      type="number" required min={18} value={minderForm.age} 
-                      onChange={e => setMinderForm({...minderForm, age: e.target.value})}
-                      className="w-full bg-black border border-gray-800 p-3 text-sm text-white focus:outline-none focus:border-pink-500" 
-                    />
-                 </div>
-                 <div className="space-y-2">
-                    <label className="text-[10px] uppercase text-gray-500 font-bold tracking-widest">Instagram ID</label>
-                    <input 
-                      type="text" required value={minderForm.instagram_id} 
-                      onChange={e => setMinderForm({...minderForm, instagram_id: e.target.value})}
-                      className="w-full bg-black border border-gray-800 p-3 text-sm text-white focus:outline-none focus:border-pink-500" 
-                      placeholder="@username"
-                    />
-                 </div>
-              </div>
-
-              <div className="space-y-2">
-                 <label className="text-[10px] uppercase text-gray-500 font-bold tracking-widest">Briefing (Bio)</label>
-                 <textarea 
-                   required rows={3} maxLength={150} value={minderForm.bio} 
-                   onChange={e => setMinderForm({...minderForm, bio: e.target.value})}
-                   className="w-full bg-black border border-gray-800 p-3 text-sm text-white focus:outline-none focus:border-pink-500 resize-none" 
-                   placeholder="Admin generated bio..."
-                 />
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={injecting || !minderForm.file}
-                className="w-full bg-pink-600 text-white font-black uppercase py-4 tracking-widest hover:bg-pink-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(219,39,119,0.3)]"
-              >
-                {injecting ? 'INJECTING...' : <><PlusSquare className="w-5 h-5" /> PUSH TO GRID</>}
-              </button>
-            </form>
-          </div>
-
-          {/* RIGHT: HOLOGRAPHIC PREVIEW */}
-          <div className="w-full md:w-[350px] bg-[#050505] border border-pink-900/30 rounded-lg flex flex-col items-center justify-center p-6 relative">
-             <div className="absolute top-4 left-4 text-[10px] text-pink-500 font-bold tracking-widest animate-pulse">
-               LIVE HOLOGRAPHIC PREVIEW
-             </div>
-             
-             {/* Mini Swipe Card Replica */}
-             <div className="w-full aspect-[3/4] bg-black border border-gray-800 rounded-xl relative overflow-hidden mt-8 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-                {minderForm.preview ? (
-                  <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${minderForm.preview})` }}>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                  </div>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center flex-col text-gray-700 gap-2">
-                    <Crosshair className="w-12 h-12 opacity-20" />
-                    <span className="text-[10px] font-mono uppercase">AWAITING INTEL</span>
-                  </div>
-                )}
-
-                <div className="absolute bottom-0 w-full p-4 flex flex-col gap-2 z-10">
-                  <h2 className="text-2xl font-black uppercase text-white drop-shadow-lg flex items-center gap-2">
-                    {minderForm.alias || "ALIAS"} <span className="text-lg text-gray-300 font-normal">{minderForm.age || "00"}</span>
-                  </h2>
-                  <div className="text-[10px] font-bold text-white bg-pink-600 w-fit px-2 py-0.5 rounded border border-pink-500/50">
-                    @{minderForm.instagram_id || "instagram"}
-                  </div>
-                  <p className="text-[10px] text-gray-300 mt-1 font-medium bg-black/40 p-2 rounded backdrop-blur-sm border border-white/10 break-words">
-                    {minderForm.bio || "Intel briefing will appear here."}
-                  </p>
+              <form onSubmit={handleUpsertTarget} className="p-6 space-y-6">
+                
+                {/* Image Upload Area */}
+                <div className="flex flex-col items-center">
+                   <div onClick={() => fileInputRef.current?.click()} className={`w-32 h-32 md:w-40 md:h-40 bg-[#050505] border flex flex-col items-center justify-center cursor-pointer overflow-hidden transition-all group ${minderForm.preview ? (editingId ? 'border-blue-500/50' : 'border-pink-500/50') : 'border-white/10 hover:border-white/30'}`}>
+                     {minderForm.preview ? (
+                       <img src={minderForm.preview} className="w-full h-full object-cover opacity-80 group-hover:opacity-50 transition-opacity" alt="Preview" />
+                     ) : (
+                       <div className="flex flex-col items-center text-gray-600 group-hover:text-white transition-colors">
+                         <Upload className="w-5 h-5 mb-2" />
+                         <span className="text-[8px] font-black tracking-widest uppercase">UPLOAD ASSET</span>
+                       </div>
+                     )}
+                   </div>
+                   <input type="file" ref={fileInputRef} onChange={handleImageSelect} className="hidden" accept="image/*" />
+                   {editingId && !minderForm.file && <p className="text-[8px] text-gray-500 mt-2 text-center uppercase tracking-widest">CURRENT ASSET RETAINED. CLICK TO REPLACE.</p>}
                 </div>
-             </div>
-          </div>
-        </div>
-      )}
 
-      {/* ========================================================= */}
-      {/* FOOTER: SYSTEM TERMINAL                                   */}
-      {/* ========================================================= */}
-      <div className="mt-4 bg-black border-t border-green-900/30 pt-2 h-32 overflow-hidden flex flex-col shrink-0">
-        <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1 flex items-center gap-2 px-2">
-           <Terminal className="w-3 h-3" /> SYSTEM LOGS
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[9px] uppercase text-gray-500 font-bold tracking-widest mb-1 block">Target Alias</label>
+                    <input type="text" required value={minderForm.alias} onChange={e => setMinderForm({...minderForm, alias: e.target.value})} className="w-full bg-[#050505] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-pink-500/50 transition-colors placeholder:text-gray-800" placeholder="Codename" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[9px] uppercase text-gray-500 font-bold tracking-widest mb-1 block">Age</label>
+                      <input type="number" required min={18} value={minderForm.age} onChange={e => setMinderForm({...minderForm, age: e.target.value})} className="w-full bg-[#050505] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-pink-500/50 transition-colors" placeholder="18+" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] uppercase text-gray-500 font-bold tracking-widest mb-1 block">Instagram</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 font-black text-xs">@</span>
+                        <input type="text" required value={minderForm.instagram_id} onChange={e => setMinderForm({...minderForm, instagram_id: e.target.value})} className="w-full bg-[#050505] border border-white/10 py-3 pl-8 pr-3 text-xs text-white focus:outline-none focus:border-pink-500/50 transition-colors placeholder:text-gray-800" placeholder="username" />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] uppercase text-gray-500 font-bold tracking-widest mb-1 block">Briefing Notes</label>
+                    <textarea required rows={4} maxLength={200} value={minderForm.bio} onChange={e => setMinderForm({...minderForm, bio: e.target.value})} className="w-full bg-[#050505] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-pink-500/50 transition-colors resize-none custom-scrollbar placeholder:text-gray-800" placeholder="Target bio logic..." />
+                  </div>
+                </div>
+
+                <button type="submit" disabled={injecting || (!editingId && !minderForm.file)} className={`w-full text-black font-black uppercase py-4 text-xs tracking-[0.2em] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${editingId ? 'bg-blue-500 hover:bg-blue-400' : 'bg-pink-600 hover:bg-pink-500'}`}>
+                  {injecting ? <RefreshCw className="w-4 h-4 animate-spin" /> : (editingId ? <HardDrive className="w-4 h-4" /> : <PlusSquare className="w-4 h-4" />)}
+                  {injecting ? 'PROCESSING...' : (editingId ? 'OVERWRITE RECORD' : 'EXECUTE INJECTION')}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --------------------------------------------------------------------- */}
+      {/* GLOBAL TERMINAL LOG (PINNED BOTTOM)                                   */}
+      {/* --------------------------------------------------------------------- */}
+      <div className="h-40 bg-[#050505] border-t border-white/10 flex flex-col shrink-0">
+        <div className="px-4 py-2 border-b border-white/5 bg-[#0a0a0a] text-[9px] text-gray-500 uppercase tracking-widest font-black flex items-center gap-2">
+           <Terminal className="w-3 h-3" /> SYSTEM STDOUT
         </div>
-        <div className="flex-1 overflow-y-auto font-mono text-[10px] text-green-900/80 space-y-1 px-2 custom-scrollbar">
-           {adminLog.map((log, i) => (
-             <div key={i} className="hover:text-green-500 transition-colors cursor-default">{log}</div>
+        <div className="flex-1 overflow-y-auto p-4 font-mono text-[10px] space-y-1.5 custom-scrollbar flex flex-col-reverse">
+           <div className="text-gray-600 animate-pulse flex items-center gap-2"><span>_</span> AWAITING KERNEL INPUT...</div>
+           {adminLog.map((log) => (
+             <div key={log.id} className="flex gap-4 hover:bg-white/5 px-2 py-0.5 rounded transition-colors">
+               <span className="text-gray-600 shrink-0 w-16">{log.time}</span>
+               <span className={`${log.colorClass} shrink-0 w-8`}>[{log.type}]</span>
+               <span className="text-gray-300 break-all">{log.msg}</span>
+             </div>
            ))}
-           <div className="text-green-500/30 animate-pulse">_ AWAITING INPUT...</div>
         </div>
       </div>
 
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #050505; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #333; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 }
 
-// ------------------------------------------------------------------
+// --------------------------------------------------------------------------
 // SUB-COMPONENTS
-// ------------------------------------------------------------------
-
-const StatsCard = ({ label, value, icon, color = "text-green-500" }) => (
-  <div className="bg-[#050505] border border-green-900/30 p-4 md:p-6 rounded relative overflow-hidden group hover:border-green-500/30 transition-all">
-    <div className="absolute right-4 top-4 opacity-50 grayscale group-hover:grayscale-0 transition-all group-hover:scale-110">
-      {icon}
-    </div>
-    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">{label}</div>
-    <div className={`text-2xl md:text-3xl font-black ${color} tracking-tighter`}>{value}</div>
-    <div className="absolute bottom-0 left-0 h-1 bg-green-900/20 w-full">
-      <div className={`h-full ${color.replace('text', 'bg')} opacity-20 w-[60%]`}></div>
-    </div>
+// --------------------------------------------------------------------------
+const StatBlock = ({ label, value, accent = "text-white" }) => (
+  <div className="p-6 border-r border-b border-white/10 flex flex-col justify-between group relative overflow-hidden">
+    <div className="absolute -inset-10 bg-white/5 opacity-0 group-hover:opacity-100 blur-xl transition-opacity pointer-events-none" />
+    <span className="text-[9px] text-gray-500 uppercase font-black tracking-widest mb-2 block">{label}</span>
+    <span className={`text-2xl md:text-3xl font-black ${accent} tracking-tighter`}>{value}</span>
   </div>
 );
 
-const StatusBadge = ({ status }) => {
-  const styles = {
-    PENDING: "bg-yellow-900/10 text-yellow-500 border-yellow-500/20",
-    ACTIVE: "bg-red-900/10 text-red-500 border-red-500/20 animate-pulse",
-    COMPLETED: "bg-green-900/10 text-green-500 border-green-500/20",
-    REJECTED: "bg-gray-800 text-gray-500 border-gray-700",
+const StatusIndicator = ({ status }) => {
+  const config = {
+    PENDING: { color: "text-amber-400", border: "border-amber-400/20", bg: "bg-amber-400/10" },
+    ACTIVE: { color: "text-emerald-400", border: "border-emerald-400/20", bg: "bg-emerald-400/10", pulse: true },
+    COMPLETED: { color: "text-blue-400", border: "border-blue-400/20", bg: "bg-blue-400/10" },
+    REJECTED: { color: "text-gray-500", border: "border-gray-500/20", bg: "bg-gray-500/10" },
   };
+  const style = config[status] || config.PENDING;
   return (
-    <span className={`px-2 py-1 rounded border text-[10px] font-bold uppercase tracking-widest ${styles[status] || styles.PENDING}`}>
-      {status}
-    </span>
+    <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border ${style.border} ${style.bg}`}>
+      <div className={`w-1.5 h-1.5 rounded-full ${style.color.replace('text-', 'bg-')} ${style.pulse ? 'animate-ping absolute' : ''}`} />
+      <div className={`w-1.5 h-1.5 rounded-full ${style.color.replace('text-', 'bg-')} relative`} />
+      <span className={`text-[8px] font-black uppercase tracking-widest ${style.color}`}>{status}</span>
+    </div>
   );
 };
 
-const ActionButton = ({ onClick, icon, color, bg, border }) => (
-  <button 
-    onClick={onClick} 
-    className={`p-2 rounded border transition-all hover:scale-105 active:scale-95 ${bg} ${color} ${border} hover:opacity-100`}
-  >
+const ActionIcon = ({ onClick, icon, hover }) => (
+  <button onClick={onClick} className={`p-2 rounded-sm text-gray-500 transition-all ${hover}`}>
     {icon}
   </button>
 );
