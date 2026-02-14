@@ -25,6 +25,9 @@ export default function MinderHub() {
   const [mobileHudOpen, setMobileHudOpen] = useState(false);
   const [pageOffset, setPageOffset] = useState(0);
   const [fetchingMore, setFetchingMore] = useState(false);
+  const [userSwipes, setUserSwipes] = useState(new Map()); // Track all user swipes: Map<target_id, 'SMASH' | 'PASS'>
+  const [toastMessage, setToastMessage] = useState(null); // For non-blocking notifications
+  const [stats, setStats] = useState({ mostSmashed: null, mostPassed: null }); // Leaderboard stats
 
   // 1. OPTIMIZED DATA INGESTION ENGINE
   const fetchTargets = useCallback(async (currentOffset = 0, currentSession = session) => {
@@ -38,15 +41,21 @@ export default function MinderHub() {
         .order('created_at', { ascending: false })
         .range(currentOffset, currentOffset + limit - 1);
       
+      let swipedIds = [];
+      
       if (currentSession?.user?.id) {
         const { data: swiped } = await supabase
           .from('minder_swipes')
-          .select('target_id')
+          .select('target_id, action')
           .eq('swiper_id', currentSession.user.id);
+        
+        if (swiped && swiped.length > 0) {
+          // Store user's swipes in state for future reference
+          const swipeMap = new Map();
+          swiped.forEach(s => swipeMap.set(s.target_id, s.action));
+          setUserSwipes(swipeMap);
           
-        const swipedIds = swiped?.map(s => s.target_id).filter(id => !!id) || [];
-        if (swipedIds.length > 0) {
-          query = query.not('id', 'in', `(${swipedIds.join(',')})`);
+          swipedIds = swiped.map(s => s.target_id).filter(id => !!id);
         }
       }
 
@@ -88,14 +97,72 @@ export default function MinderHub() {
     }
   }, [session, supabase]);
 
+  // 1.5 FETCH LEADERBOARD STATS
+  const fetchStats = useCallback(async () => {
+    try {
+      // Get most smashed target
+      const { data: smashData } = await supabase
+        .from('minder_swipes')
+        .select('target_id, minder_targets(alias, image_url)')
+        .eq('action', 'SMASH')
+        .limit(1000);
+      
+      // Get most passed target
+      const { data: passData } = await supabase
+        .from('minder_swipes')
+        .select('target_id, minder_targets(alias, image_url)')
+        .eq('action', 'PASS')
+        .limit(1000);
+      
+      // Count occurrences
+      const smashCounts = {};
+      const passCounts = {};
+      
+      smashData?.forEach(s => {
+        if (s.target_id) {
+          smashCounts[s.target_id] = (smashCounts[s.target_id] || 0) + 1;
+        }
+      });
+      
+      passData?.forEach(p => {
+        if (p.target_id) {
+          passCounts[p.target_id] = (passCounts[p.target_id] || 0) + 1;
+        }
+      });
+      
+      // Find top targets
+      const topSmashed = Object.entries(smashCounts).sort((a, b) => b[1] - a[1])[0];
+      const topPassed = Object.entries(passCounts).sort((a, b) => b[1] - a[1])[0];
+      
+      if (topSmashed) {
+        const target = smashData.find(s => s.target_id === topSmashed[0])?.minder_targets;
+        setStats(prev => ({
+          ...prev,
+          mostSmashed: { alias: target?.alias, count: topSmashed[1], image_url: target?.image_url }
+        }));
+      }
+      
+      if (topPassed) {
+        const target = passData.find(p => p.target_id === topPassed[0])?.minder_targets;
+        setStats(prev => ({
+          ...prev,
+          mostPassed: { alias: target?.alias, count: topPassed[1], image_url: target?.image_url }
+        }));
+      }
+    } catch (err) {
+      console.error("Stats fetch failed:", err);
+    }
+  }, [supabase]);
+
   // 2. OPTIMIZED LIVE FEED - Simplified for mobile
   useEffect(() => {
     const initializeSystem = async () => {
       const { data: { session: activeSession } } = await supabase.auth.getSession();
       setSession(activeSession);
       
-      // Sequential execution - fetch targets first (priority), then feed
+      // Sequential execution - fetch targets first (priority), then feed and stats
       await fetchTargets(0, activeSession);
+      fetchStats(); // Non-blocking stats fetch
       
       // Fetch feed after targets are loaded (non-blocking)
       supabase.from('minder_targets')
@@ -134,9 +201,9 @@ export default function MinderHub() {
     };
 
     initializeSystem();
-  }, [supabase, fetchTargets]);
+  }, [supabase, fetchTargets, fetchStats]);
 
-  // 3. OPTIMISTIC SWIPE ENGINE
+  // 3. OPTIMISTIC SWIPE ENGINE WITH DUPLICATE DETECTION
   const processSwipe = async (direction, targetId, isOwnCard = false) => {
     if (!session && !isOwnCard) {
       setLoginModalOpen(true);
@@ -144,8 +211,48 @@ export default function MinderHub() {
     }
 
     const targetAlias = targets.find(t => t.id === targetId)?.alias || 'UNKNOWN';
+    const action = direction === 'right' ? 'SMASH' : 'PASS';
+    
+    // Check if user already swiped this target
+    const existingSwipe = userSwipes.get(targetId);
+    
+    if (existingSwipe && !isOwnCard) {
+      if (existingSwipe === action) {
+        // Same action - show toast and don't process
+        setToastMessage(`Already ${action.toLowerCase()}ed ${targetAlias}!`);
+        setTimeout(() => setToastMessage(null), 3000);
+        return false;
+      } else {
+        // Different action - allow change, update database
+        setToastMessage(`Changed to ${action} for ${targetAlias}`);
+        setTimeout(() => setToastMessage(null), 3000);
+        
+        // Update local state
+        setUserSwipes(prev => new Map(prev).set(targetId, action));
+        
+        // Update database
+        await supabase
+          .from('minder_swipes')
+          .update({ action })
+          .eq('swiper_id', session.user.id)
+          .eq('target_id', targetId);
+        
+        // Update feed
+        const color = direction === 'right' ? 'text-green-500' : 'text-red-500';
+        setFeed(prev => [{ 
+          id: `change-${Date.now()}`, 
+          text: `> YOU CHANGED TO ${action} [${targetAlias}]`, 
+          color 
+        }, ...prev].slice(0, 30));
+        
+        // Refresh stats
+        fetchStats();
+        
+        return true;
+      }
+    }
 
-    // Immediate UI update
+    // New swipe - immediate UI update
     setTargets(prev => {
       const newDeck = prev.slice(0, -1); // Remove last item (current card)
       if (newDeck.length < 3 && !fetchingMore) {
@@ -157,8 +264,10 @@ export default function MinderHub() {
 
     if (isOwnCard || direction === 'dismiss') return true;
 
-    const action = direction === 'right' ? 'SMASH' : 'PASS';
     const color = direction === 'right' ? 'text-green-500' : 'text-red-500';
+
+    // Update local swipe tracking
+    setUserSwipes(prev => new Map(prev).set(targetId, action));
 
     // INSTANT FEED INJECTION (Optimistic UI)
     setFeed(prev => [{ 
@@ -170,7 +279,10 @@ export default function MinderHub() {
     // Background Database Write - don't await
     supabase.from('minder_swipes').insert([{
       swiper_id: session.user.id, target_id: targetId, action: action
-    }]).catch(err => console.error('Swipe save failed:', err));
+    }]).then(() => {
+      // Refresh stats after successful swipe
+      fetchStats();
+    }).catch(err => console.error('Swipe save failed:', err));
 
     return true;
   };
@@ -223,7 +335,7 @@ export default function MinderHub() {
       {/* --- MOBILE TACTICAL HUD TRIGGER --- */}
       <button 
         onClick={() => setMobileHudOpen(true)}
-        className="md:hidden fixed top-5 right-5 z-[250] w-14 h-14 bg-pink-600 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(219,39,119,0.6)] border-2 border-pink-400 active:scale-90 transition-transform"
+        className="md:hidden fixed top-20 right-5 z-[150] w-14 h-14 bg-pink-600 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(219,39,119,0.6)] border-2 border-pink-400 active:scale-90 transition-transform"
       >
         <Activity className="w-6 h-6 text-white animate-pulse" />
       </button>
@@ -373,6 +485,7 @@ export default function MinderHub() {
                     depthIndex={positionFromTop}
                     session={session}
                     isOwnCard={isOwnCard}
+                    existingSwipe={userSwipes.get(target.id)}
                     onSwipe={(dir) => processSwipe(dir, target.id, isOwnCard)}
                     onForceMatch={() => router.push(`/request?target=${encodeURIComponent(target.alias)}&service=matchup`)}
                   />
@@ -398,6 +511,61 @@ export default function MinderHub() {
 
       </div>
 
+      {/* --- TOAST NOTIFICATION --- */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[600] px-8 py-4 bg-pink-600 text-white font-black text-sm rounded-2xl shadow-[0_0_60px_rgba(219,39,119,0.8)] border-2 border-pink-400 flex items-center gap-3"
+          >
+            <Info className="w-5 h-5" />
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- LEADERBOARD STATS PANEL --- */}
+      {(stats.mostSmashed || stats.mostPassed) && (
+        <div className="fixed top-20 md:top-10 left-4 md:left-auto md:right-[520px] z-[100] flex flex-col gap-3">
+          {stats.mostSmashed && (
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-gradient-to-br from-green-950/95 to-black/95 backdrop-blur-2xl border-2 border-green-500/40 rounded-2xl p-4 shadow-[0_0_40px_rgba(34,197,94,0.3)] min-w-[200px]"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-cover bg-center border-2 border-green-400 shadow-lg" style={{ backgroundImage: `url(${stats.mostSmashed.image_url})` }} />
+                <div className="flex-1">
+                  <div className="text-[8px] text-green-400 font-black uppercase tracking-[0.3em] mb-1">🔥 Most Smashed</div>
+                  <div className="text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostSmashed.alias}</div>
+                  <div className="text-[10px] text-green-300 font-bold">{stats.mostSmashed.count} smashes</div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+          
+          {stats.mostPassed && (
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-gradient-to-br from-red-950/95 to-black/95 backdrop-blur-2xl border-2 border-red-500/40 rounded-2xl p-4 shadow-[0_0_40px_rgba(239,68,68,0.3)] min-w-[200px]"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-cover bg-center border-2 border-red-400 shadow-lg" style={{ backgroundImage: `url(${stats.mostPassed.image_url})` }} />
+                <div className="flex-1">
+                  <div className="text-[8px] text-red-400 font-black uppercase tracking-[0.3em] mb-1">❄️ Most Passed</div>
+                  <div className="text-sm font-black text-white uppercase tracking-tight truncate">{stats.mostPassed.alias}</div>
+                  <div className="text-[10px] text-red-300 font-bold">{stats.mostPassed.count} passes</div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      )}
+
       <style jsx global>{`
         @keyframes grid-move { 0% { background-position: 0 0; } 100% { background-position: 0 50px; } }
         @keyframes scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
@@ -418,7 +586,7 @@ export default function MinderHub() {
 // ------------------------------------------------------------------
 // OPTIMIZED PHYSICS CARD COMPONENT
 // ------------------------------------------------------------------
-const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, onSwipe, onForceMatch }) => {
+const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, existingSwipe, onSwipe, onForceMatch }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
   
@@ -471,10 +639,103 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
     }
   };
 
-  const redFlagScore = useMemo(() => {
-    const hash = target.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return (hash % 99) + 1;
-  }, [target.id]);
+  // ADVANCED RED FLAG SCORING ALGORITHM
+  const calculateRedFlagScore = useMemo(() => {
+    let score = 0;
+    const bio = target.bio?.toLowerCase() || '';
+    const alias = target.alias?.toLowerCase() || '';
+    
+    // 1. Bio Length Analysis (too short = sketchy, too long = oversharing)
+    const bioLength = bio.length;
+    if (bioLength < 20) score += 15; // Too brief, hiding something
+    if (bioLength > 300) score += 10; // Oversharing, potential drama
+    
+    // 2. Red Flag Keywords in Bio
+    const redFlagKeywords = [
+      'drama', 'crazy', 'ex', 'toxic', 'psycho', 'baggage', 'complicated',
+      'trust issues', 'commitment', 'polyamory', 'open relationship',
+      'spiritual', 'manifestation', 'crypto', 'nft', 'influencer',
+      'entrepreneur', 'ceo', 'founder', 'alpha', 'sigma',
+      'looking for', 'seeking', 'need', 'must', 'require',
+      'no hookups', 'serious only', 'not here for games',
+      'gym', 'fitness', 'grind', 'hustle', 'boss babe'
+    ];
+    
+    const foundFlags = redFlagKeywords.filter(keyword => bio.includes(keyword));
+    score += foundFlags.length * 8; // 8 points per red flag keyword
+    
+    // 3. Excessive Emojis (overcompensating)
+    const emojiCount = (bio.match(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu) || []).length;
+    if (emojiCount > 10) score += 12;
+    if (emojiCount > 20) score += 8;
+    
+    // 4. ALL CAPS = AGGRESSIVE
+    const capsRatio = (bio.match(/[A-Z]/g) || []).length / Math.max(bio.length, 1);
+    if (capsRatio > 0.3) score += 10; // More than 30% caps
+    
+    // 5. Excessive Punctuation (!!! or ???)
+    const exclamationCount = (bio.match(/!/g) || []).length;
+    const questionCount = (bio.match(/\?/g) || []).length;
+    if (exclamationCount > 5) score += 7;
+    if (questionCount > 5) score += 7;
+    
+    // 6. Self-proclaimed "nice guy/girl" = DANGER
+    if (bio.includes('nice guy') || bio.includes('nice girl') || bio.includes('good guy') || bio.includes('good girl')) {
+      score += 20;
+    }
+    
+    // 7. Age-based risk (very young or age gaps suspicious)
+    const age = target.age || 25;
+    if (age < 21) score += 8; // Immature
+    if (age > 45) score += 5; // Possible midlife crisis
+    
+    // 8. Instagram handle analysis
+    const instaHandle = target.instagram_id?.toLowerCase() || '';
+    if (instaHandle.includes('official')) score += 12; // Trying too hard
+    if (instaHandle.includes('real')) score += 12;
+    if (instaHandle.match(/\d{4,}/)) score += 8; // Too many numbers = fake account?
+    
+    // 9. Alias red flags
+    if (alias.includes('king') || alias.includes('queen') || alias.includes('princess')) score += 10;
+    if (alias.includes('bad') || alias.includes('savage') || alias.includes('beast')) score += 8;
+    
+    // 10. Contradictions (says "no drama" but bio is dramatic)
+    if ((bio.includes('no drama') || bio.includes('drama free')) && bio.length > 150) {
+      score += 15; // Protesting too much
+    }
+    
+    // 11. List of demands/requirements
+    const requirementCount = (bio.match(/must|should|need to|have to|required/gi) || []).length;
+    score += requirementCount * 6;
+    
+    // 12. Zodiac obsession
+    const zodiacCount = (bio.match(/aries|taurus|gemini|cancer|leo|virgo|libra|scorpio|sagittarius|capricorn|aquarius|pisces/gi) || []).length;
+    if (zodiacCount > 2) score += 12;
+    
+    // 13. Height requirements (shallow)
+    if (bio.match(/\d['"]/) || bio.includes('tall') || bio.includes('height')) {
+      score += 10;
+    }
+    
+    // 14. Venmo/Cash App in bio = gold digger
+    if (bio.includes('venmo') || bio.includes('cashapp') || bio.includes('cash app') || bio.includes('paypal')) {
+      score += 25;
+    }
+    
+    // 15. "Just ask" = lazy or hiding
+    if (bio.includes('just ask') || bio.includes('ask me')) {
+      score += 10;
+    }
+    
+    // Normalize to 1-99 range
+    const normalizedScore = Math.min(Math.max(Math.round(score), 1), 99);
+    
+    // Add some randomness for entertainment (±5 points)
+    const randomVariance = Math.floor(Math.random() * 11) - 5;
+    const finalScore = Math.min(Math.max(normalizedScore + randomVariance, 1), 99);
+    
+    return finalScore;
+  }, [target.bio, target.alias, target.age, target.instagram_id]);
 
   return (
     <motion.div
@@ -497,6 +758,12 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
       {isOwnCard && isTop && (
         <div className="absolute top-6 md:top-10 left-0 w-full bg-yellow-500 text-black py-2 md:py-2.5 font-black text-center tracking-[0.3em] md:tracking-[0.4em] text-[9px] md:text-[10px] uppercase z-30 shadow-2xl flex items-center justify-center gap-3 md:gap-4">
           <User className="w-4 h-4 md:w-5 md:h-5 stroke-[3px]" /> YOU
+        </div>
+      )}
+
+      {existingSwipe && isTop && !isOwnCard && (
+        <div className={`absolute top-6 md:top-10 left-0 w-full ${existingSwipe === 'SMASH' ? 'bg-green-500' : 'bg-red-500'} text-black py-2 md:py-2.5 font-black text-center tracking-[0.3em] md:tracking-[0.4em] text-[9px] md:text-[10px] uppercase z-30 shadow-2xl flex items-center justify-center gap-3 md:gap-4 animate-pulse`}>
+          <Eye className="w-4 h-4 md:w-5 md:h-5 stroke-[3px]" /> PREVIOUSLY {existingSwipe}ED - SWIPE TO CHANGE
         </div>
       )}
 
@@ -529,7 +796,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
 
           <div className="text-center bg-black/95 p-2.5 md:p-3 lg:p-4 rounded-xl md:rounded-2xl border border-white/10 backdrop-blur-3xl shadow-2xl flex flex-col items-center min-w-[70px] md:min-w-[80px]">
             <div className="text-[7px] md:text-[8px] lg:text-[9px] text-red-500 font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mb-0.5 md:mb-1 leading-none">FLAG</div>
-            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-white leading-none tracking-tighter">{redFlagScore}%</div>
+            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-white leading-none tracking-tighter">{calculateRedFlagScore}%</div>
           </div>
         </div>
 
@@ -566,7 +833,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
                    <div className="absolute inset-0 bg-red-500/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
                    <span className="relative z-10 flex items-center justify-center gap-1.5 md:gap-2 tracking-widest">
                      <ThumbsDown className="w-3.5 h-3.5 md:w-4 md:h-4"/>
-                     <span className="hidden sm:inline">PASS</span>
+                     <span className="hidden sm:inline">{existingSwipe === 'PASS' ? 'PASS' : existingSwipe === 'SMASH' ? 'CHANGE' : 'PASS'}</span>
                    </span>
                  </button>
                  <button 
@@ -576,7 +843,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, o
                    <div className="absolute inset-0 bg-green-500/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
                    <span className="relative z-10 flex items-center justify-center gap-1.5 md:gap-2 tracking-widest">
                      <Heart className="w-3.5 h-3.5 md:w-4 md:h-4"/>
-                     <span className="hidden sm:inline">SMASH</span>
+                     <span className="hidden sm:inline">{existingSwipe === 'SMASH' ? 'SMASH' : existingSwipe === 'PASS' ? 'CHANGE' : 'SMASH'}</span>
                    </span>
                  </button>
                </>
