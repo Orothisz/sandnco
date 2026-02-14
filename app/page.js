@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Siren, 
@@ -45,10 +45,9 @@ const siteConfig = {
       desc: "We create the situation. You play the victim. Full alibi provision included.",
       features: ["Evidence Fabrication", "The 'Crazy Ex' Narrative", "3rd Party Intervention"],
       color: "text-red-500",
-      border: "group-hover:border-red-500/50",
-      bg: "group-hover:bg-red-950/20",
-      hoverBg: "hover:bg-red-900/10",
-      glow: "group-hover:shadow-[0_0_40px_rgba(220,38,38,0.15)]"
+      bgHover: "bg-red-950/20",
+      glowColor: "rgba(220,38,38,0.3)",
+      borderColor: "border-red-500",
     },
     {
       id: "patchup",
@@ -60,10 +59,9 @@ const siteConfig = {
       desc: "Gaslighting? No. We call it 'Strategic Reality Distortion'.",
       features: ["Jealousy Engineering", "Staged Run-Ins", "Memory Manipulation"],
       color: "text-blue-500",
-      border: "group-hover:border-blue-500/50",
-      bg: "group-hover:bg-blue-950/20",
-      hoverBg: "hover:bg-blue-900/10",
-      glow: "group-hover:shadow-[0_0_40px_rgba(59,130,246,0.15)]"
+      bgHover: "bg-blue-950/20",
+      glowColor: "rgba(59,130,246,0.3)",
+      borderColor: "border-blue-500",
     },
     {
       id: "matchup",
@@ -75,10 +73,9 @@ const siteConfig = {
       desc: "Consent is easier when we curate the choices using deep-web data.",
       features: ["Geo-Fenced Entrapment", "Financial Audits", "Social Engineering"],
       color: "text-emerald-500",
-      border: "group-hover:border-emerald-500/50",
-      bg: "group-hover:bg-emerald-950/20",
-      hoverBg: "hover:bg-emerald-900/10",
-      glow: "group-hover:shadow-[0_0_40px_rgba(16,185,129,0.15)]"
+      bgHover: "bg-emerald-950/20",
+      glowColor: "rgba(16,185,129,0.3)",
+      borderColor: "border-emerald-500",
     },
     {
       id: "vip",
@@ -90,10 +87,9 @@ const siteConfig = {
       desc: "Full reality distortion field. We control the weather of your love life.",
       features: ["24/7 Surveillance", "Burner Phones", "NDA Required"],
       color: "text-purple-500",
-      border: "group-hover:border-purple-500/50",
-      bg: "group-hover:bg-purple-950/20",
-      hoverBg: "hover:bg-purple-900/10",
-      glow: "group-hover:shadow-[0_0_40px_rgba(168,85,247,0.15)]"
+      bgHover: "bg-purple-950/20",
+      glowColor: "rgba(168,85,247,0.3)",
+      borderColor: "border-purple-500",
     },
   ],
 };
@@ -101,40 +97,18 @@ const siteConfig = {
 // ============================================================================
 // 60FPS HARDWARE-ACCELERATED COMPONENTS
 // ============================================================================
-
-// Replaced heavy SVG filter with lightweight static noise for 60fps mobile
 const NoiseOverlay = () => (
-  <div className="fixed inset-0 pointer-events-none z-[5] opacity-[0.15] mix-blend-overlay will-change-transform bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+  <div className="fixed inset-0 pointer-events-none z-[5] opacity-[0.12] mix-blend-overlay hw-accel bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
 );
 
 const Scanlines = () => (
-  <div className="fixed inset-0 pointer-events-none z-[6] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,3px_100%] will-change-transform" />
+  <div className="fixed inset-0 pointer-events-none z-[6] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,3px_100%] hw-accel" />
 );
 
-// High-Fidelity Kinetic Glitch Text
-const KineticGlitch = ({ text }) => {
-  return (
-    <div className="relative inline-block group cursor-crosshair">
-      <span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-b from-gray-300 via-gray-500 to-gray-800 group-hover:text-white transition-colors duration-300 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-        {text}
-      </span>
-      <span className="absolute top-0 left-0 w-full h-full text-red-600 opacity-0 group-hover:opacity-100 transition-all duration-75 mix-blend-screen select-none pointer-events-none group-hover:animate-glitch-1">
-        {text}
-      </span>
-      <span className="absolute top-0 left-0 w-full h-full text-blue-600 opacity-0 group-hover:opacity-100 transition-all duration-75 mix-blend-screen select-none pointer-events-none group-hover:animate-glitch-2">
-        {text}
-      </span>
-      <span className="absolute top-0 left-0 w-full h-full text-white opacity-0 group-hover:opacity-100 transition-all duration-100 mix-blend-overlay select-none pointer-events-none group-hover:blur-[2px]">
-        {text}
-      </span>
-    </div>
-  );
-};
-
-// 60FPS Pure CSS Marquee
+// 60FPS Pure CSS Marquee via Translate3D
 const PoliceTape = ({ text, direction = "left", rotate = "rotate-2" }) => (
-  <div className={`w-[120%] -ml-[10%] bg-[#eab308] text-black py-3 font-black text-xl md:text-2xl uppercase tracking-[0.2em] overflow-hidden border-y-4 border-black ${rotate} shadow-[0_10px_30px_rgba(0,0,0,0.5)] relative z-20 will-change-transform`}>
-    <div className={`flex gap-10 whitespace-nowrap ${direction === "left" ? 'animate-marquee-left' : 'animate-marquee-right'}`}>
+  <div className={`w-[120%] -ml-[10%] bg-[#eab308] text-black py-3 font-black text-xl md:text-2xl uppercase tracking-[0.2em] overflow-hidden border-y-4 border-black ${rotate} shadow-[0_10px_30px_rgba(0,0,0,0.5)] relative z-20 hw-accel hw-layer`}>
+    <div className={`flex gap-10 whitespace-nowrap ${direction === "left" ? 'animate-marquee-left-3d' : 'animate-marquee-right-3d'} hw-accel`}>
       {Array(15).fill(text).map((t, i) => (
         <span key={i} className="flex items-center gap-4">
           <ShieldAlert className="w-6 h-6 md:w-8 md:h-8" /> {t}
@@ -144,12 +118,70 @@ const PoliceTape = ({ text, direction = "left", rotate = "rotate-2" }) => (
   </div>
 );
 
+// GPU-Promoted Kinetic Glitch Text (Opacity/Transform Only)
+const KineticGlitch = ({ text }) => {
+  return (
+    <div className="relative inline-block group cursor-crosshair hw-accel">
+      <span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-b from-gray-200 via-gray-400 to-gray-700 group-hover:text-white transition-colors duration-300 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+        {text}
+      </span>
+      <span className="absolute top-0 left-0 w-full h-full text-red-600 opacity-0 group-hover:opacity-100 transition-opacity duration-75 mix-blend-screen select-none pointer-events-none group-hover:animate-glitch-1-3d hw-accel">
+        {text}
+      </span>
+      <span className="absolute top-0 left-0 w-full h-full text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-75 mix-blend-screen select-none pointer-events-none group-hover:animate-glitch-2-3d hw-accel">
+        {text}
+      </span>
+      <span className="absolute top-0 left-0 w-full h-full text-white opacity-0 group-hover:opacity-100 transition-opacity duration-100 mix-blend-overlay select-none pointer-events-none group-hover:blur-[2px] hw-accel">
+        {text}
+      </span>
+    </div>
+  );
+};
+
+const PanicButton = () => {
+  const [safeMode, setSafeMode] = useState(false);
+  if (safeMode) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-white text-black font-serif p-8 overflow-auto hw-layer">
+        <div className="max-w-4xl mx-auto">
+          <div className="border-b pb-4 mb-4 flex items-center gap-4">
+              <img src="https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png" className="w-12 h-12" alt="wiki"/>
+              <h1 className="text-3xl font-serif">Cat</h1>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">From Wikipedia, the free encyclopedia</p>
+          <div className="float-right border border-gray-300 p-2 mb-4 ml-4 bg-gray-50 w-64 text-xs">
+            <img src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=300" className="w-full mb-2" alt="cat"/>
+            <p>The domestic cat (Felis catus).</p>
+          </div>
+          <p className="mb-4">The <b>cat</b> (<i>Felis catus</i>) is a domestic species of small carnivorous mammal. It is the only domesticated species in the family Felidae.</p>
+          <button onClick={() => setSafeMode(false)} className="mt-8 text-blue-600 hover:underline text-xs">(Restore Session)</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => setSafeMode(true)}
+      className="fixed bottom-6 right-6 z-[100] w-14 h-14 bg-red-600 rounded-full border-4 border-red-900 flex items-center justify-center text-white shadow-[0_0_30px_rgba(255,0,0,0.6)] hover:scale-110 active:scale-95 transition-transform group hw-accel"
+      title="PANIC: HIDE EVERYTHING"
+    >
+      <Eye className="w-6 h-6 group-hover:hidden" />
+      <span className="hidden group-hover:block font-black text-xs">HIDE</span>
+    </button>
+  );
+};
+
 // ============================================================================
 // MAIN PAGE ENGINE
 // ============================================================================
 export default function Home() {
   const router = useRouter();
   const supabase = createClientComponentClient();
+  
+  // Parallax Setup (Optimized for Mobile via Transform)
+  const { scrollYProgress } = useScroll();
+  const y = useTransform(scrollYProgress, [0, 1], ["0%", "20%"]);
+  const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
   
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [agreed, setAgreed] = useState(true); 
@@ -161,12 +193,13 @@ export default function Home() {
   const handleMouseMove = (e) => {
     if (!adRef.current) return;
     const rect = adRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    // Reduce movement multiplier for better performance
+    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 15;
+    const y = ((e.clientY - rect.top) / rect.height - 0.5) * -15;
     setMousePos({ x, y });
   };
 
-  // AUTH & WAIVER CHECK (Once per 24hrs)
+  // AUTH & WAIVER CHECK
   useEffect(() => {
     const checkUserAndWaiver = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -227,29 +260,29 @@ export default function Home() {
   // --------------------------------------------------------------------------
   if (!agreed) {
     return (
-      <div className="fixed inset-0 z-[100] bg-[#020205] flex flex-col items-center justify-center p-6 text-center select-none">
+      <div className="fixed inset-0 z-[100] bg-[#020205] flex flex-col items-center justify-center p-6 text-center select-none hw-layer">
         <div className="absolute inset-0 bg-red-900/10 pointer-events-none" />
         <Scanlines />
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }} className="text-6xl mb-8 grayscale opacity-50">
+        <motion.div animate={{ rotateZ: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear", type: "tween" }} className="text-6xl mb-8 grayscale opacity-50 hw-accel">
           👾
         </motion.div>
         <h2 className="text-3xl md:text-5xl font-black uppercase text-red-600 mb-6 tracking-widest drop-shadow-[0_0_20px_rgba(220,38,38,0.8)]">
           Liability Waiver
         </h2>
-        <div className="max-w-lg w-full bg-black/60 border border-red-900/50 p-8 rounded-2xl text-left mb-10 backdrop-blur-md shadow-2xl relative z-10">
+        <div className="max-w-lg w-full bg-black/60 border border-red-900/50 p-8 rounded-2xl text-left mb-10 backdrop-blur-md shadow-2xl relative z-10 hw-accel">
           <p className="text-xs md:text-sm font-mono text-red-400 leading-relaxed uppercase tracking-wider">
             WARNING: You are accessing <strong className="text-white">SANDNCO.LOL</strong>. By proceeding, you acknowledge that we are not responsible for broken hearts, restraining orders, or public humiliation. Our algorithms are aggressive. Our agents are anonymous.
           </p>
         </div>
         
         {progress < 100 ? (
-          <div className="w-64 md:w-96 h-2 bg-gray-900 rounded-full overflow-hidden border border-gray-800 relative z-10">
-            <div className="h-full bg-red-600 transition-all duration-75" style={{ width: `${progress}%` }} />
+          <div className="w-64 md:w-96 h-2 bg-gray-900 rounded-full overflow-hidden border border-gray-800 relative z-10 hw-accel">
+            <div className="h-full bg-red-600 transition-all duration-75" style={{ width: `${progress}%`, transform: 'translateZ(0)' }} />
           </div>
         ) : (
           <button 
             onClick={acceptWaiver}
-            className="px-10 py-5 bg-red-600 text-white font-black uppercase tracking-[0.3em] hover:bg-white hover:text-black hover:scale-105 active:scale-95 transition-all shadow-[0_0_40px_rgba(220,38,38,0.6)] rounded-xl border border-red-400 relative z-10"
+            className="px-10 py-5 bg-red-600 text-white font-black uppercase tracking-[0.3em] transition-transform active:scale-95 animate-pulse shadow-[0_0_40px_rgba(220,38,38,0.6)] rounded-xl border border-red-400 relative z-10 hw-accel"
           >
             Accept & Enter
           </button>
@@ -271,23 +304,24 @@ export default function Home() {
         <link rel="icon" href="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&q=80&w=32" />
       </Head>
 
-      <main className="bg-[#020205] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans relative">
+      <main className="bg-[#020205] text-gray-100 selection:bg-red-500 selection:text-black overflow-x-hidden font-sans relative hw-main">
         <NoiseOverlay />
         <Scanlines />
+        <PanicButton />
 
-        {/* --- PREMIUM NAVBAR (Mobile Optimized) --- */}
-        <nav className="fixed top-0 w-full z-50 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center bg-[#020205]/80 backdrop-blur-xl border-b border-white/10 shadow-2xl will-change-transform">
+        {/* --- PREMIUM NAVBAR (Mobile & Desktop 60FPS) --- */}
+        <nav className="fixed top-0 w-full z-50 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center bg-[#020205]/80 backdrop-blur-xl border-b border-white/10 shadow-2xl hw-layer">
             
             {/* Logo Group */}
-            <Link href="/" className="flex items-center gap-2 md:gap-3 group shrink-0">
-              <img src="/logo.png" className="w-7 h-7 md:w-10 md:h-10 object-contain invert group-hover:rotate-12 transition-transform" alt="logo" />
+            <Link href="/" className="flex items-center gap-2 md:gap-3 group shrink-0 hw-accel">
+              <img src="/logo.png" className="w-7 h-7 md:w-10 md:h-10 object-contain invert transition-transform" alt="logo" />
               <span className="font-black text-lg md:text-2xl italic tracking-tighter text-white drop-shadow-md">
                 SANDNCO<span className="text-red-600">.LOL</span>
               </span>
             </Link>
 
             {/* Navigation & Actions */}
-            <div className="flex items-center gap-3 md:gap-8 text-[10px] md:text-xs font-mono tracking-widest uppercase font-bold">
+            <div className="flex items-center gap-3 md:gap-8 text-[10px] md:text-xs font-mono tracking-widest uppercase font-bold hw-accel">
               
               {/* Desktop Only Text Links */}
               <div className="hidden lg:flex gap-6 items-center mr-4">
@@ -297,8 +331,8 @@ export default function Home() {
               
               {/* MINDER TACTICAL BADGE */}
               <Link href="/minder" className="group shrink-0">
-                <span className="flex items-center justify-center gap-1.5 md:gap-2 text-pink-500 group-hover:text-white transition-colors border border-pink-500/50 bg-pink-900/20 px-3 md:px-4 py-1.5 md:py-2 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)] hover:shadow-[0_0_30px_rgba(219,39,119,0.6)]">
-                  <Crosshair className="w-3 h-3 md:w-4 md:h-4 animate-spin-slow" /> 
+                <span className="flex items-center justify-center gap-1.5 md:gap-2 text-pink-500 transition-colors border border-pink-500/50 bg-pink-900/20 px-3 md:px-4 py-1.5 md:py-2 rounded-full shadow-[0_0_20px_rgba(219,39,119,0.3)]">
+                  <Crosshair className="w-3 h-3 md:w-4 md:h-4 animate-spin-slow-3d" /> 
                   <span className="font-black hidden sm:inline">MINDER</span>
                 </span>
               </Link>
@@ -307,21 +341,22 @@ export default function Home() {
               {isLoggedIn ? (
                 <div className="flex items-center gap-2 md:gap-4 shrink-0">
                   <Link href="/dashboard">
-                    <button className="flex items-center justify-center gap-2 bg-green-900/30 border border-green-500/50 text-green-400 px-3 md:px-4 py-1.5 md:py-2 hover:bg-green-500 hover:text-black transition-all rounded font-black shadow-[0_0_15px_rgba(34,197,94,0.2)]">
+                    <button className="flex items-center justify-center gap-2 bg-green-900/30 border border-green-500/50 text-green-400 px-3 md:px-4 py-1.5 md:py-2 rounded font-black shadow-[0_0_15px_rgba(34,197,94,0.2)]">
                       <Terminal className="w-3 h-3 md:w-4 md:h-4" /> 
                       <span className="hidden sm:inline">DASHBOARD</span>
                     </button>
                   </Link>
-                  <button onClick={handleLogout} className="flex items-center justify-center text-red-500 hover:text-white border border-red-500/30 px-3 py-1.5 md:py-2 rounded hover:bg-red-600 transition-colors font-black">
+                  <button onClick={handleLogout} className="flex items-center justify-center text-red-500 border border-red-500/30 px-3 py-1.5 md:py-2 rounded font-black">
                     <Power className="w-3 h-3 md:w-4 md:h-4" />
                     <span className="hidden sm:inline ml-2">LOGOUT</span>
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 shrink-0">
+                  <Link href="/login" className="hidden sm:inline-block"><span className="text-gray-400 transition-colors cursor-pointer font-black">LOGIN</span></Link>
                   <Link href="/login">
-                    <button className="bg-white text-black px-4 md:px-6 py-1.5 md:py-2 hover:bg-red-600 hover:text-white transition-all shadow-[0_0_20px_rgba(255,255,255,0.4)] rounded hover:scale-105 active:scale-95 font-black">
-                      LOGIN
+                    <button className="bg-white text-black px-4 md:px-6 py-1.5 md:py-2 shadow-[0_0_20px_rgba(255,255,255,0.4)] rounded active:scale-95 font-black transition-transform">
+                      <span className="hidden sm:inline">ENROLL</span><span className="sm:hidden">LOGIN</span>
                     </button>
                   </Link>
                 </div>
@@ -330,19 +365,23 @@ export default function Home() {
         </nav>
 
         {/* --- CRAZY CINEMATIC HERO SECTION --- */}
-        <section className="relative min-h-[100dvh] flex flex-col justify-center items-center pt-24 px-4 overflow-hidden">
+        <section className="relative min-h-[100dvh] flex flex-col justify-center items-center pt-24 px-4 overflow-hidden hw-layer">
           
-          {/* Animated 3D Cyber-Grid Floor */}
-          <div className="absolute inset-0 z-0 opacity-30 pointer-events-none overflow-hidden">
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [transform:perspective(500px)_rotateX(60deg)_translateY(-100px)_translateZ(-200px)] animate-grid-move will-change-transform" />
+          {/* Hardware Accelerated Spinning Wireframe Radar (Costs 0 CPU) */}
+          <div className="absolute top-1/2 left-1/2 w-[800px] h-[800px] md:w-[1200px] md:h-[1200px] -mt-[400px] -ml-[400px] md:-mt-[600px] md:-ml-[600px] border-[1px] border-white/5 rounded-full animate-radar-spin-3d pointer-events-none z-0">
+            <div className="absolute inset-0 border-[1px] border-white/5 rounded-full scale-75" />
+            <div className="absolute inset-0 border-[1px] border-white/5 rounded-full scale-50" />
+            <div className="absolute top-1/2 left-0 w-full h-[1px] bg-white/5" />
+            <div className="absolute top-0 left-1/2 w-[1px] h-full bg-white/5" />
           </div>
 
-          {/* Cinematic Scanning Laser */}
-          <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-             <div className="w-full h-1 bg-red-500/50 shadow-[0_0_30px_rgba(220,38,38,1)] animate-laser-scan will-change-transform" />
-          </div>
+          {/* 3D Cyber-Grid Floor via GPU Translate */}
+          <div className="absolute bottom-0 w-[200vw] h-[50vh] left-[-50vw] bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [transform:perspective(500px)_rotateX(60deg)_translate3d(0,0,0)] animate-grid-move-3d pointer-events-none z-0 opacity-40" />
 
-          <div className="relative z-20 text-center max-w-[1400px] w-full flex flex-col items-center">
+          {/* Cinematic Scanning Laser (Translate3D) */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-red-500/50 shadow-[0_0_30px_rgba(220,38,38,1)] animate-laser-scan-3d pointer-events-none z-10" />
+
+          <motion.div style={{ y, opacity }} className="relative z-20 text-center max-w-[1400px] w-full flex flex-col items-center hw-accel">
             
             <div className="inline-flex items-center gap-2 md:gap-3 px-4 md:px-5 py-2 border border-yellow-500/50 bg-yellow-900/20 rounded-full mb-8 md:mb-10 backdrop-blur-md shadow-[0_0_30px_rgba(234,179,8,0.3)]">
                <Siren className="w-3 h-3 md:w-4 md:h-4 text-yellow-500 animate-pulse" />
@@ -351,7 +390,7 @@ export default function Home() {
                </span>
             </div>
 
-            <h1 className="text-[14vw] md:text-[10vw] leading-[0.85] font-black tracking-tighter mb-8 relative select-none w-full flex flex-col items-center justify-center">
+            <h1 className="text-[14vw] md:text-[10vw] leading-[0.85] font-black tracking-tighter mb-8 relative select-none w-full flex flex-col items-center justify-center z-20">
                <span className="block text-white drop-shadow-[0_10px_30px_rgba(255,255,255,0.2)] mix-blend-screen">
                  {siteConfig.hero.line1}
                </span>
@@ -367,33 +406,33 @@ export default function Home() {
               {siteConfig.hero.beta}
             </p>
 
-            <div className="flex flex-col md:flex-row gap-6 md:gap-8 justify-center items-center w-full max-w-2xl px-4">
+            <div className="flex flex-col md:flex-row gap-6 md:gap-8 justify-center items-center w-full max-w-2xl px-4 relative z-30">
               <Link href="/login?next=/request" className="w-full md:w-auto">
-                  <button className="w-full md:w-auto px-8 md:px-10 py-4 md:py-5 bg-white text-black font-black text-sm md:text-base uppercase tracking-[0.2em] hover:bg-red-600 hover:text-white transition-all shadow-[0_0_50px_rgba(255,255,255,0.3)] rounded-xl hover:scale-105 active:scale-95 flex items-center justify-center gap-3">
+                  <button className="w-full md:w-auto px-8 md:px-10 py-4 md:py-5 bg-white text-black font-black text-sm md:text-base uppercase tracking-[0.2em] shadow-[0_0_50px_rgba(255,255,255,0.3)] rounded-xl active:scale-95 transition-transform flex items-center justify-center gap-3">
                     <Terminal className="w-4 h-4 md:w-5 md:h-5" /> INITIATE PROTOCOL
                   </button>
               </Link>
-              <p className="text-[9px] md:text-xs font-mono text-gray-400 max-w-[280px] text-center md:text-left border-t md:border-t-0 md:border-l-2 border-gray-700 pt-4 md:pt-0 md:pl-6 leading-relaxed bg-black/40 md:bg-transparent p-3 md:p-0 rounded md:rounded-none">
+              <p className="text-[9px] md:text-xs font-mono text-gray-500 max-w-[280px] text-center md:text-left border-t md:border-t-0 md:border-l-2 border-gray-800 pt-4 md:pt-0 md:pl-6 leading-relaxed bg-black/40 md:bg-transparent p-3 md:p-0 rounded md:rounded-none">
                 // {siteConfig.hero.manifesto}
               </p>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Deep Ambient Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[800px] md:h-[800px] bg-red-600/20 rounded-full blur-[100px] md:blur-[150px] pointer-events-none z-0 will-change-transform" />
+          {/* Deep Ambient Glow (Static size, rasterized) */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[800px] md:h-[800px] bg-red-600/20 rounded-full blur-[100px] pointer-events-none z-0 hw-accel" />
         </section>
 
         {/* --- 60FPS CSS POLICE TAPE --- */}
-        <div className="relative py-12 md:py-24 overflow-hidden bg-black/50 backdrop-blur-sm border-y border-white/5">
+        <div className="relative py-12 md:py-24 overflow-hidden bg-black/50 backdrop-blur-sm border-y border-white/5 hw-layer">
            <PoliceTape text="FREE SERVICES UNTIL MARCH 12 // BETA TESTING PHASE" rotate="rotate-2" direction="left" />
            <PoliceTape text="NO PAYMENTS REQUIRED // TOTAL ANONYMITY GUARANTEED" rotate="-rotate-1" direction="right" />
         </div>
 
         {/* --- 60FPS CSS LIVE KILL LOG --- */}
-        <div className="w-full bg-[#050505] border-b border-white/10 py-4 overflow-hidden relative z-20 shadow-inner">
-          <div className="absolute left-0 top-0 bottom-0 w-16 md:w-32 bg-gradient-to-r from-[#050505] to-transparent z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-16 md:w-32 bg-gradient-to-l from-[#050505] to-transparent z-10" />
-          <div className="flex gap-10 md:gap-20 whitespace-nowrap text-[10px] md:text-xs font-mono text-green-500 font-bold uppercase tracking-widest animate-marquee-left will-change-transform">
+        <div className="w-full bg-[#050505] border-b border-white/10 py-4 overflow-hidden relative z-20 shadow-inner hw-layer">
+          <div className="absolute left-0 top-0 bottom-0 w-16 md:w-32 bg-gradient-to-r from-[#050505] to-transparent z-10 hw-accel" />
+          <div className="absolute right-0 top-0 bottom-0 w-16 md:w-32 bg-gradient-to-l from-[#050505] to-transparent z-10 hw-accel" />
+          <div className="flex gap-10 md:gap-20 whitespace-nowrap text-[10px] md:text-xs font-mono text-green-500 font-bold uppercase tracking-widest animate-marquee-left-3d hw-accel">
             {[...siteConfig.liveFeed, ...siteConfig.liveFeed, ...siteConfig.liveFeed].map((log, i) => (
               <span key={i} className="flex items-center gap-3">
                 <span className="w-1.5 h-1.5 md:w-2 md:h-2 bg-green-500 rounded-full animate-ping" /> {log}
@@ -403,17 +442,18 @@ export default function Home() {
         </div>
 
         {/* --- THE PREMIER MINDER ADVERTISEMENT --- */}
-        <section className="px-4 md:px-12 lg:px-20 py-24 md:py-32 max-w-[1600px] mx-auto relative z-20">
+        <section className="px-4 md:px-12 lg:px-20 py-24 md:py-32 max-w-[1600px] mx-auto relative z-20 hw-layer">
            <motion.div
              initial={{ opacity: 0, y: 50 }}
              whileInView={{ opacity: 1, y: 0 }}
              viewport={{ once: true, margin: "-100px" }}
-             transition={{ duration: 0.8, ease: "easeOut" }}
-             className="bg-[#0a0a0f]/80 backdrop-blur-2xl border border-pink-500/30 p-6 md:p-16 rounded-[2rem] md:rounded-[3rem] relative overflow-hidden group shadow-[0_0_100px_rgba(219,39,119,0.15)]"
+             transition={{ duration: 0.8, type: "tween" }}
+             className="bg-[#0a0a0f]/80 backdrop-blur-2xl border border-pink-500/30 p-6 md:p-16 rounded-[2rem] md:rounded-[3rem] relative overflow-hidden group shadow-[0_0_100px_rgba(219,39,119,0.15)] hw-accel"
              onMouseMove={handleMouseMove}
              ref={adRef}
            >
-             <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-pink-600/20 blur-[150px] pointer-events-none transition-opacity group-hover:opacity-100 opacity-50 will-change-transform" />
+             {/* Static background glow */}
+             <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-pink-600/20 blur-[150px] pointer-events-none opacity-50 hw-accel" />
 
              <div className="flex flex-col lg:flex-row items-center justify-between gap-12 md:gap-16 relative z-10">
                
@@ -438,25 +478,24 @@ export default function Home() {
                  </p>
                  
                  <Link href="/minder" className="block w-full md:w-auto">
-                   <button className="w-full md:w-auto bg-pink-600 text-white font-black uppercase px-8 md:px-10 py-4 md:py-5 tracking-[0.3em] hover:bg-white hover:text-black transition-all shadow-[0_0_40px_rgba(219,39,119,0.6)] flex items-center justify-center gap-3 md:gap-4 hover:scale-105 active:scale-95 rounded-2xl border-2 border-pink-400 text-xs md:text-sm">
+                   <button className="w-full md:w-auto bg-pink-600 text-white font-black uppercase px-8 md:px-10 py-4 md:py-5 tracking-[0.3em] shadow-[0_0_40px_rgba(219,39,119,0.6)] flex items-center justify-center gap-3 md:gap-4 active:scale-95 transition-transform rounded-2xl border-2 border-pink-400 text-xs md:text-sm">
                      <Crosshair className="w-4 h-4 md:w-5 md:h-5" /> ENTER THE GRID
                    </button>
                  </Link>
                </div>
 
-               {/* Interactive 3D Hologram Terminal (Desktop Only) */}
+               {/* Interactive 3D Hologram Terminal (Hardware Accelerated) */}
                <motion.div 
                  animate={{ 
-                   rotateX: mousePos.y * -20, 
-                   rotateY: mousePos.x * 20,
-                   z: 50
+                   rotateX: mousePos.y, 
+                   rotateY: mousePos.x,
+                   z: 0
                  }}
-                 transition={{ type: "spring", stiffness: 100, damping: 30, mass: 1 }}
+                 transition={{ type: "tween", ease: "linear", duration: 0.1 }}
                  style={{ perspective: 1000 }}
-                 className="hidden lg:flex w-[350px] h-[500px] bg-[#050505] border-2 border-pink-500/50 rounded-3xl relative overflow-hidden shadow-[0_0_80px_rgba(219,39,119,0.3)] items-center justify-center flex-col group/holo will-change-transform"
+                 className="hidden lg:flex w-[350px] h-[500px] bg-[#050505] border-2 border-pink-500/50 rounded-3xl relative overflow-hidden shadow-[0_0_80px_rgba(219,39,119,0.3)] items-center justify-center flex-col group/holo hw-accel"
                >
-                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-pink-500/20 to-transparent h-[200%] animate-[scan_2.5s_linear_infinite] pointer-events-none mix-blend-screen" />
-                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none mix-blend-overlay" />
+                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-pink-500/20 to-transparent h-[200%] animate-scan-3d pointer-events-none mix-blend-screen" />
                   
                  <div className="absolute top-5 left-5 flex gap-2 items-center bg-black/60 px-3 py-1 rounded-full border border-pink-500/30 backdrop-blur-md">
                    <div className="w-2 h-2 rounded-full bg-pink-500 animate-ping" />
@@ -464,7 +503,7 @@ export default function Home() {
                  </div>
 
                  <div className="absolute top-5 right-5">
-                   <Radar className="w-6 h-6 text-pink-500 opacity-50 animate-spin" />
+                   <Radar className="w-6 h-6 text-pink-500 opacity-50 animate-spin-slow-3d" />
                  </div>
 
                  <div className="relative z-10 flex flex-col items-center transform translate-z-10 transition-transform duration-300 group-hover/holo:scale-110">
@@ -483,13 +522,13 @@ export default function Home() {
            </motion.div>
         </section>
 
-        {/* --- THE MENU (SERVICES) --- */}
-        <section id="pricing" className="px-4 md:px-12 lg:px-20 pb-32 md:pb-40 max-w-[1600px] mx-auto">
+        {/* --- THE MENU (SERVICES) Optimized GPU Render --- */}
+        <section id="pricing" className="px-4 md:px-12 lg:px-20 pb-32 md:pb-40 max-w-[1600px] mx-auto hw-layer">
            <div className="mb-12 md:mb-24 text-center md:text-left">
               <h2 className="text-4xl md:text-7xl font-black uppercase text-white mb-4 md:mb-6 tracking-tighter drop-shadow-lg">
                 Operational <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-purple-600">Menu</span>
               </h2>
-              <p className="text-[9px] md:text-sm font-mono text-gray-400 font-bold uppercase tracking-[0.2em] md:tracking-[0.3em] bg-white/5 inline-block px-4 md:px-6 py-2 rounded-full border border-white/10 shadow-md">
+              <p className="text-[10px] md:text-sm font-mono text-gray-400 font-bold uppercase tracking-[0.2em] md:tracking-[0.3em] bg-white/5 inline-block px-4 md:px-6 py-2 rounded-full border border-white/10 shadow-md">
                 SECURE CONNECTION ESTABLISHED. SELECT OBJECTIVE.
               </p>
            </div>
@@ -501,16 +540,18 @@ export default function Home() {
                   initial={{ opacity: 0, y: 50 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-50px" }}
-                  transition={{ delay: i * 0.1, duration: 0.5 }}
-                  className={`group relative bg-[#0a0a0f] border border-white/10 rounded-3xl p-6 md:p-10 min-h-[400px] md:min-h-[500px] flex flex-col justify-between transition-all duration-300 overflow-hidden ${service.hoverBg} ${service.glow}`}
+                  transition={{ delay: i * 0.1, duration: 0.5, type: "tween" }}
+                  className={`group relative bg-[#0a0a0f] border border-white/10 rounded-3xl p-6 md:p-10 min-h-[400px] md:min-h-[500px] flex flex-col justify-between overflow-hidden hw-accel`}
                 >
-                  <div className={`absolute inset-0 border-2 border-transparent ${service.border} transition-colors duration-500 rounded-3xl pointer-events-none`} />
+                  {/* Performance fix: Fade in a pre-rendered glowing div instead of transitioning border colors */}
+                  <div className={`absolute inset-0 border-2 rounded-3xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${service.borderColor} shadow-[inset_0_0_30px_${service.glowColor}] hw-accel`} />
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${service.bgHover} hw-accel`} />
                   
                   <div className="relative z-10">
                      <div className={`mb-6 md:mb-8 p-3 md:p-4 bg-black w-fit rounded-2xl border border-white/5 shadow-lg ${service.color}`}>
                        {service.icon}
                      </div>
-                     <h3 className="text-2xl md:text-3xl font-black uppercase italic mb-2 md:mb-3 text-white group-hover:translate-x-2 transition-transform duration-300">
+                     <h3 className="text-2xl md:text-3xl font-black uppercase italic mb-2 md:mb-3 text-white group-hover:translate-x-2 transition-transform duration-300 hw-accel">
                        {service.title}
                      </h3>
                      <div className={`text-[9px] md:text-xs font-black uppercase tracking-[0.2em] mb-4 md:mb-6 ${service.color}`}>
@@ -540,7 +581,7 @@ export default function Home() {
                           </span>
                        </div>
                        <Link href="/login?next=/request">
-                          <button className="text-[10px] md:text-xs font-black uppercase bg-white text-black px-4 md:px-6 py-2.5 md:py-3 rounded-xl hover:bg-gray-300 transition-colors shadow-lg active:scale-95">
+                          <button className="text-[10px] md:text-xs font-black uppercase bg-white text-black px-4 md:px-6 py-2.5 md:py-3 rounded-xl shadow-lg active:scale-95 transition-transform">
                           Select
                           </button>
                        </Link>
@@ -552,7 +593,7 @@ export default function Home() {
         </section>
 
         {/* --- FLAGSHIP FOOTER --- */}
-        <footer className="bg-black py-16 md:py-24 px-6 md:px-12 lg:px-20 border-t border-white/10 relative z-20">
+        <footer className="bg-black py-16 md:py-24 px-6 md:px-12 lg:px-20 border-t border-white/10 relative z-20 hw-layer">
           <div className="max-w-[1600px] mx-auto grid lg:grid-cols-2 gap-12 lg:gap-12">
              <div>
                <div className="flex items-center gap-4 mb-6 md:mb-8">
@@ -581,72 +622,108 @@ export default function Home() {
       </main>
 
       <style jsx global>{`
-        /* Pure CSS 60FPS Marquees */
-        @keyframes marqueeLeft {
+        /* HW Acceleration Utilities */
+        .hw-accel {
+          transform: translate3d(0,0,0);
+          backface-visibility: hidden;
+          perspective: 1000px;
+          will-change: transform;
+        }
+        .hw-layer {
+          contain: layout paint style;
+          isolation: isolate;
+        }
+        .hw-main {
+          isolation: isolate;
+          transform: translateZ(0);
+        }
+
+        /* Pure CSS 60FPS Marquees via Translate3D */
+        @keyframes marqueeLeft3D {
           0% { transform: translate3d(0, 0, 0); }
           100% { transform: translate3d(-50%, 0, 0); }
         }
-        @keyframes marqueeRight {
+        @keyframes marqueeRight3D {
           0% { transform: translate3d(-50%, 0, 0); }
           100% { transform: translate3d(0, 0, 0); }
         }
-        .animate-marquee-left {
-          animation: marqueeLeft 15s linear infinite;
-          will-change: transform;
+        .animate-marquee-left-3d {
+          animation: marqueeLeft3D 15s linear infinite;
         }
-        .animate-marquee-right {
-          animation: marqueeRight 15s linear infinite;
-          will-change: transform;
+        .animate-marquee-right-3d {
+          animation: marqueeRight3D 15s linear infinite;
         }
 
-        /* Moving Cyber Grid */
-        @keyframes grid-move {
-          0% { background-position: 0 0; }
-          100% { background-position: 0 50px; }
+        /* Moving Cyber Grid 3D */
+        @keyframes grid-move-3d {
+          0% { transform: perspective(500px) rotateX(60deg) translate3d(0, -100px, -200px); }
+          100% { transform: perspective(500px) rotateX(60deg) translate3d(0, -50px, -200px); }
         }
-        .animate-grid-move {
-          animation: grid-move 2s linear infinite;
+        .animate-grid-move-3d {
+          animation: grid-move-3d 2s linear infinite;
         }
 
-        /* Scanning Laser */
-        @keyframes laser-scan {
-          0% { transform: translateY(-10vh); opacity: 0; }
+        /* Scanning Laser 3D */
+        @keyframes laser-scan-3d {
+          0% { transform: translate3d(0, -10vh, 0); opacity: 0; }
           10% { opacity: 1; }
           90% { opacity: 1; }
-          100% { transform: translateY(110vh); opacity: 0; }
+          100% { transform: translate3d(0, 110vh, 0); opacity: 0; }
         }
-        .animate-laser-scan {
-          animation: laser-scan 4s ease-in-out infinite;
+        .animate-laser-scan-3d {
+          animation: laser-scan-3d 4s ease-in-out infinite;
         }
 
-        /* Violent Glitch Animations */
-        @keyframes glitch1 {
-          0% { transform: translate(0) }
-          20% { transform: translate(-3px, 3px) }
-          40% { transform: translate(-3px, -3px) }
-          60% { transform: translate(3px, 3px) }
-          80% { transform: translate(3px, -3px) }
-          100% { transform: translate(0) }
+        /* Radar Spin 3D */
+        @keyframes radar-spin-3d {
+          0% { transform: rotateZ(0deg) translate3d(0,0,0); }
+          100% { transform: rotateZ(360deg) translate3d(0,0,0); }
         }
-        @keyframes glitch2 {
-          0% { transform: translate(0) }
-          20% { transform: translate(3px, -3px) }
-          40% { transform: translate(3px, 3px) }
-          60% { transform: translate(-3px, -3px) }
-          80% { transform: translate(-3px, 3px) }
-          100% { transform: translate(0) }
+        .animate-radar-spin-3d {
+          animation: radar-spin-3d 20s linear infinite;
         }
-        .animate-glitch-1 { animation: glitch1 0.2s infinite; }
-        .animate-glitch-2 { animation: glitch2 0.25s infinite; }
 
-        @keyframes scan {
-          0% { transform: translateY(-100%); }
-          100% { transform: translateY(100%); }
+        /* Spin Slow 3D */
+        @keyframes spin-slow-3d {
+          0% { transform: rotateZ(0deg) translate3d(0,0,0); }
+          100% { transform: rotateZ(360deg) translate3d(0,0,0); }
         }
+        .animate-spin-slow-3d {
+          animation: spin-slow-3d 8s linear infinite;
+        }
+
+        /* Scan 3D */
+        @keyframes scan-3d {
+          0% { transform: translate3d(0, -100%, 0); }
+          100% { transform: translate3d(0, 100%, 0); }
+        }
+        .animate-scan-3d {
+          animation: scan-3d 2.5s linear infinite;
+        }
+
+        /* Violent Glitch Animations via Translate3D */
+        @keyframes glitch1-3d {
+          0% { transform: translate3d(0, 0, 0); }
+          20% { transform: translate3d(-3px, 3px, 0); }
+          40% { transform: translate3d(-3px, -3px, 0); }
+          60% { transform: translate3d(3px, 3px, 0); }
+          80% { transform: translate3d(3px, -3px, 0); }
+          100% { transform: translate3d(0, 0, 0); }
+        }
+        @keyframes glitch2-3d {
+          0% { transform: translate3d(0, 0, 0); }
+          20% { transform: translate3d(3px, -3px, 0); }
+          40% { transform: translate3d(3px, 3px, 0); }
+          60% { transform: translate3d(-3px, -3px, 0); }
+          80% { transform: translate3d(-3px, 3px, 0); }
+          100% { transform: translate3d(0, 0, 0); }
+        }
+        .animate-glitch-1-3d { animation: glitch1-3d 0.2s infinite; }
+        .animate-glitch-2-3d { animation: glitch2-3d 0.25s infinite; }
+
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .will-change-transform { will-change: transform; }
       `}</style>
     </>
   );
