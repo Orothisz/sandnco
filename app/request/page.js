@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Upload, Camera, Calendar, Instagram, Phone, Mail, User, 
-  HeartCrack, Heart, Search, Lock, CheckCircle, Loader, 
+  HeartCrack, Heart, Search, Radar, Lock, CheckCircle, Loader, 
   AlertTriangle, FileWarning, ChevronLeft, ShieldAlert, Zap, Terminal
 } from "lucide-react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
