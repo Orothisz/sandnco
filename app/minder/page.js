@@ -10,10 +10,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-// ============================================================================
-// COMPLETELY REWRITTEN GRID SYSTEM - BULLETPROOF
-// ============================================================================
-
 const isMobileDevice = () => {
   if (typeof window === 'undefined') return false;
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -25,11 +21,11 @@ export default function MinderHub() {
   
   // CORE STATE
   const [session, setSession] = useState(null);
-  const [profiles, setProfiles] = useState([]);
-  const [removedCards, setRemovedCards] = useState(new Set());
+  const [allProfiles, setAllProfiles] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [userSwipes, setUserSwipes] = useState(new Map());
   
-  // DEFERRED STATE
+  // SECONDARY STATE
   const [feed, setFeed] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardUpdating, setLeaderboardUpdating] = useState(false);
@@ -43,7 +39,7 @@ export default function MinderHub() {
   const [swipeFeedback, setSwipeFeedback] = useState(null);
   
   const mounted = useRef(true);
-  const hydrationStarted = useRef(false);
+  const loadingMore = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowInstructions(false), 3000);
@@ -51,39 +47,56 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // LOAD DATA
+  // LOAD PROFILES (INFINITE)
   // --------------------------------------------------------------------------
-  const loadCriticalData = useCallback(async (activeSession) => {
+  const loadProfiles = useCallback(async (append = false) => {
+    if (loadingMore.current) return;
+    loadingMore.current = true;
+
     try {
       const { data: rawProfiles, error } = await supabase
         .from('minder_targets')
         .select('id, alias, age, bio, image_url, instagram_id, user_id, redflag_score')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(20);
       
       if (error) throw error;
       if (!rawProfiles || !mounted.current) return;
 
-      let swipeMap = new Map();
-      if (activeSession?.user?.id) {
-        supabase
-          .from('minder_swipes')
-          .select('target_id, action')
-          .eq('swiper_id', activeSession.user.id)
-          .then(({ data: swipes }) => {
-            if (swipes && mounted.current) {
-              swipes.forEach(s => swipeMap.set(s.target_id, s.action));
-              setUserSwipes(swipeMap);
-            }
-          });
+      if (append) {
+        setAllProfiles(prev => [...prev, ...rawProfiles]);
+      } else {
+        setAllProfiles(rawProfiles);
       }
-
-      setProfiles(rawProfiles);
-      setLoading(false);
       
+      setLoading(false);
     } catch (err) {
       console.error("Load failed:", err);
       setLoading(false);
+    } finally {
+      loadingMore.current = false;
+    }
+  }, [supabase]);
+
+  // --------------------------------------------------------------------------
+  // LOAD USER SWIPES
+  // --------------------------------------------------------------------------
+  const loadUserSwipes = useCallback(async (userId) => {
+    if (!userId) return;
+
+    try {
+      const { data: swipes } = await supabase
+        .from('minder_swipes')
+        .select('target_id, action')
+        .eq('swiper_id', userId);
+      
+      if (swipes && mounted.current) {
+        const swipeMap = new Map();
+        swipes.forEach(s => swipeMap.set(s.target_id, s.action));
+        setUserSwipes(swipeMap);
+      }
+    } catch (err) {
+      console.error("Failed to load swipes:", err);
     }
   }, [supabase]);
 
@@ -143,109 +156,108 @@ export default function MinderHub() {
   }, [supabase, leaderboardUpdating]);
 
   // --------------------------------------------------------------------------
-  // HYDRATE SECONDARY DATA
+  // SETUP REALTIME FEED
   // --------------------------------------------------------------------------
-  const hydrateSecondaryData = useCallback(async () => {
-    if (hydrationStarted.current || !mounted.current) return;
-    hydrationStarted.current = true;
+  const setupRealtimeFeed = useCallback(() => {
+    if (!mounted.current) return;
 
-    const runHydration = () => {
-      Promise.all([
-        supabase
-          .from('minder_targets')
-          .select('id, alias')
-          .order('created_at', { ascending: false })
-          .limit(10)
-          .then(({ data }) => {
-            if (data && mounted.current) {
-              setFeed(data.map(t => ({ 
-                id: `init-${t.id}`, 
-                text: `> DOSSIER: [${t.alias}]`, 
-                color: 'text-gray-500' 
-              })));
-            }
-          }),
-        
-        refreshLeaderboard()
-      ]);
+    // Initial feed
+    supabase
+      .from('minder_targets')
+      .select('id, alias')
+      .order('created_at', { ascending: false })
+      .limit(10)
+      .then(({ data }) => {
+        if (data && mounted.current) {
+          setFeed(data.map(t => ({ 
+            id: `init-${t.id}`, 
+            text: `> DOSSIER: [${t.alias}]`, 
+            color: 'text-gray-500' 
+          })));
+        }
+      });
 
-      setTimeout(() => {
+    // Realtime subscription
+    const channel = supabase
+      .channel(`minder_live_${Date.now()}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'minder_swipes' 
+      }, async (payload) => {
         if (!mounted.current) return;
         
-        const channel = supabase
-          .channel(`minder_live_${Date.now()}`)
-          .on('postgres_changes', { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'minder_swipes' 
-          }, async (payload) => {
-            if (!mounted.current) return;
-            
-            const { data: t } = await supabase
-              .from('minder_targets')
-              .select('alias')
-              .eq('id', payload.new.target_id)
-              .single();
-            
-            const action = payload.new.action;
-            
-            setFeed(prev => [{
-              id: payload.new.id,
-              text: `> AGENT ${action}ED [${t?.alias || 'ANON'}]`,
-              color: action === 'SMASH' ? 'text-green-500' : 'text-red-500'
-            }, ...prev].slice(0, 15));
-            
-            if (action === 'SMASH') {
-              refreshLeaderboard();
-            }
-          })
-          .on('postgres_changes', {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'minder_swipes'
-          }, async (payload) => {
-            if (!mounted.current) return;
-            
-            const { data: t } = await supabase
-              .from('minder_targets')
-              .select('alias')
-              .eq('id', payload.new.target_id)
-              .single();
-            
-            setFeed(prev => [{
-              id: `update-${payload.new.id}-${Date.now()}`,
-              text: `> AGENT CHANGED TO ${payload.new.action} [${t?.alias || 'ANON'}]`,
-              color: payload.new.action === 'SMASH' ? 'text-green-500' : 'text-red-500'
-            }, ...prev].slice(0, 15));
-            
-            refreshLeaderboard();
-          })
-          .subscribe();
-      }, 2000);
-    };
+        const { data: t } = await supabase
+          .from('minder_targets')
+          .select('alias')
+          .eq('id', payload.new.target_id)
+          .single();
+        
+        const action = payload.new.action;
+        
+        setFeed(prev => [{
+          id: payload.new.id,
+          text: `> AGENT ${action}ED [${t?.alias || 'ANON'}]`,
+          color: action === 'SMASH' ? 'text-green-500' : 'text-red-500'
+        }, ...prev].slice(0, 15));
+        
+        if (action === 'SMASH') {
+          refreshLeaderboard();
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'minder_swipes'
+      }, async (payload) => {
+        if (!mounted.current) return;
+        
+        const { data: t } = await supabase
+          .from('minder_targets')
+          .select('alias')
+          .eq('id', payload.new.target_id)
+          .single();
+        
+        setFeed(prev => [{
+          id: `update-${payload.new.id}-${Date.now()}`,
+          text: `> AGENT CHANGED TO ${payload.new.action} [${t?.alias || 'ANON'}]`,
+          color: payload.new.action === 'SMASH' ? 'text-green-500' : 'text-red-500'
+        }, ...prev].slice(0, 15));
+        
+        refreshLeaderboard();
+      })
+      .subscribe();
 
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(runHydration, { timeout: 2000 });
-    } else {
-      setTimeout(runHydration, 100);
-    }
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [supabase, refreshLeaderboard]);
 
   // --------------------------------------------------------------------------
-  // BOOT
+  // INITIALIZE
   // --------------------------------------------------------------------------
   useEffect(() => {
     mounted.current = true;
 
-    const boot = async () => {
+    const init = async () => {
       const { data: { session: activeSession } } = await supabase.auth.getSession();
       if (mounted.current) setSession(activeSession);
       
-      await loadCriticalData(activeSession);
-      hydrateSecondaryData();
+      await loadProfiles(false);
+      
+      if (activeSession?.user?.id) {
+        await loadUserSwipes(activeSession.user.id);
+      }
+
+      setTimeout(() => {
+        if (mounted.current) {
+          refreshLeaderboard();
+          setupRealtimeFeed();
+        }
+      }, 1000);
     };
     
-    boot();
+    init();
 
     return () => {
       mounted.current = false;
@@ -253,7 +265,28 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // HANDLE SWIPE - FIXED DATABASE INTEGRATION
+  // INFINITE LOOP - ADVANCE TO NEXT CARD
+  // --------------------------------------------------------------------------
+  const advanceToNext = useCallback(() => {
+    setCurrentIndex(prev => {
+      const nextIndex = prev + 1;
+      
+      // If we're near the end, load more profiles
+      if (nextIndex >= allProfiles.length - 3) {
+        loadProfiles(true);
+      }
+      
+      // Loop back to start if we somehow reach the end
+      if (nextIndex >= allProfiles.length) {
+        return 0;
+      }
+      
+      return nextIndex;
+    });
+  }, [allProfiles.length, loadProfiles]);
+
+  // --------------------------------------------------------------------------
+  // HANDLE SWIPE
   // --------------------------------------------------------------------------
   const handleSwipe = useCallback(async (targetId, direction, isOwnCard, existingSwipe) => {
     if (!session && !isOwnCard) {
@@ -262,12 +295,12 @@ export default function MinderHub() {
     }
 
     if (isOwnCard || direction === 'dismiss') {
-      setRemovedCards(prev => new Set(prev).add(targetId));
+      advanceToNext();
       return;
     }
 
     const action = direction === 'right' ? 'SMASH' : 'PASS';
-    const target = profiles.find(p => p.id === targetId);
+    const target = allProfiles.find(p => p.id === targetId);
     const targetAlias = target?.alias || 'TARGET';
     const isChanging = existingSwipe && existingSwipe !== action;
 
@@ -284,10 +317,7 @@ export default function MinderHub() {
       navigator.vibrate(action === 'SMASH' ? [10, 5, 10] : 15);
     }
 
-    // Remove card from view immediately
-    setRemovedCards(prev => new Set(prev).add(targetId));
-
-    // Update state
+    // Update local state immediately
     setUserSwipes(prev => new Map(prev).set(targetId, action));
     setFeed(prev => [{ 
       id: `local-${Date.now()}`, 
@@ -295,7 +325,10 @@ export default function MinderHub() {
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
 
-    // Save to database - CRITICAL FIX
+    // Advance to next card
+    advanceToNext();
+
+    // Save to database
     try {
       const { error } = await supabase.from('minder_swipes').upsert(
         { 
@@ -307,7 +340,7 @@ export default function MinderHub() {
       );
 
       if (error) {
-        console.error('❌ Save failed:', error);
+        console.error('❌ Database save failed:', error);
         // Revert on error
         setUserSwipes(prev => {
           const newMap = new Map(prev);
@@ -319,56 +352,21 @@ export default function MinderHub() {
           return newMap;
         });
       } else {
-        console.log(`✅ ${isChanging ? 'CHANGED' : 'Saved'}:`, action, 'on', targetAlias);
+        console.log(`✅ Database ${isChanging ? 'updated' : 'saved'}:`, action, 'on', targetAlias);
         
-        // Refresh leaderboard on SMASH or when changing
         if (action === 'SMASH' || isChanging) {
-          console.log('📊 Refreshing leaderboard...');
           refreshLeaderboard();
         }
       }
     } catch (err) {
-      console.error('❌ Exception:', err);
+      console.error('❌ Database exception:', err);
     }
 
-  }, [session, profiles, supabase, refreshLeaderboard]);
+  }, [session, allProfiles, supabase, refreshLeaderboard, advanceToNext]);
 
-  // Get visible cards (not removed)
-  const visibleProfiles = profiles.filter(p => !removedCards.has(p.id));
-  const currentCard = visibleProfiles[0];
-  const hasCards = visibleProfiles.length > 0;
-
-  // --------------------------------------------------------------------------
-  // AUTO-RELOAD WHEN RUNNING LOW
-  // --------------------------------------------------------------------------
-  useEffect(() => {
-    // When we have 2 or fewer cards left, load more
-    if (visibleProfiles.length <= 2 && profiles.length > 0 && !loading && session) {
-      console.log('🔄 Running low on cards, loading more...');
-      
-      supabase
-        .from('minder_targets')
-        .select('id, alias, age, bio, image_url, instagram_id, user_id, redflag_score')
-        .order('created_at', { ascending: false })
-        .limit(10)
-        .then(({ data: newProfiles, error }) => {
-          if (error) {
-            console.error('Failed to load more:', error);
-            return;
-          }
-          
-          if (newProfiles && newProfiles.length > 0) {
-            // Add new profiles that aren't already in the list
-            setProfiles(prev => {
-              const existingIds = new Set(prev.map(p => p.id));
-              const uniqueNew = newProfiles.filter(p => !existingIds.has(p.id));
-              console.log(`✅ Loaded ${uniqueNew.length} new cards`);
-              return [...prev, ...uniqueNew];
-            });
-          }
-        });
-    }
-  }, [visibleProfiles.length, profiles.length, loading, session, supabase]);
+  // Get current card
+  const currentCard = allProfiles[currentIndex];
+  const hasCards = allProfiles.length > 0;
 
   return (
     <div className="h-[100dvh] bg-[#000000] text-white overflow-hidden flex flex-col md:flex-row font-mono relative touch-none select-none">
@@ -384,7 +382,7 @@ export default function MinderHub() {
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black" />
       </div>
 
-      {/* SUBTLE SWIPE INSTRUCTIONS */}
+      {/* SWIPE INSTRUCTIONS */}
       <AnimatePresence>
         {showInstructions && !loading && hasCards && (
           <motion.div
@@ -421,7 +419,7 @@ export default function MinderHub() {
         )}
       </AnimatePresence>
 
-      {/* SUBTLE SWIPE FEEDBACK */}
+      {/* SWIPE FEEDBACK */}
       <AnimatePresence>
         {swipeFeedback && (
           <motion.div
@@ -491,13 +489,13 @@ export default function MinderHub() {
           </h1>
           <div className="flex gap-2">
             <button 
-              onClick={() => { setMobileLeaderboardOpen(true); hydrateSecondaryData(); }}
+              onClick={() => { setMobileLeaderboardOpen(true); }}
               className="bg-black/60 border border-white/10 p-3 rounded-full text-yellow-500 active:scale-90 transition-transform"
             >
               <Trophy className="w-4 h-4" />
             </button>
             <button 
-              onClick={() => { setMobileHudOpen(true); hydrateSecondaryData(); }}
+              onClick={() => { setMobileHudOpen(true); }}
               className="bg-black/60 border border-white/10 p-3 rounded-full text-emerald-400 active:scale-90 transition-transform"
             >
               <Activity className="w-4 h-4" />
@@ -669,7 +667,7 @@ export default function MinderHub() {
         </div>
       </div>
 
-      {/* Main Grid */}
+      {/* Main Area */}
       <div className="flex-1 flex flex-col relative z-10 p-0 md:p-10 h-full overflow-hidden justify-center items-center pt-28 md:pt-32">
         
         {/* Desktop Header */}
@@ -690,7 +688,7 @@ export default function MinderHub() {
               MINDER<span className="text-pink-600">_</span>
             </h1>
             <p className="text-[10px] font-black text-pink-500 uppercase bg-pink-900/20 px-4 py-1.5 rounded-full border border-pink-500/20 mt-3">
-              BULLETPROOF PROTOCOL
+              INFINITE LOOP
             </p>
           </div>
 
@@ -711,16 +709,15 @@ export default function MinderHub() {
               <div className="text-xs uppercase font-black">LOADING...</div>
             </div>
           ) : !hasCards ? (
-            <div className="text-center w-[90%] md:w-full bg-[#050505] p-12 border border-white/10 rounded-3xl">
-              <Crosshair className="w-16 h-16 mx-auto mb-6 text-gray-700" />
-              <p className="text-2xl uppercase font-black text-white">GRID CLEARED</p>
-              <p className="text-xs text-gray-500 mt-4">No active signals</p>
+            <div className="text-pink-500 flex flex-col items-center gap-6">
+              <Radar className="w-16 h-16 animate-spin opacity-50" />
+              <div className="text-xs uppercase font-black">LOADING MORE...</div>
             </div>
           ) : (
             <div className="relative w-[95%] md:w-full h-[82dvh] md:h-full max-h-[800px]">
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence mode="wait">
                 {currentCard && (
-                  <SimpleSwipeCard
+                  <SwipeCard
                     key={currentCard.id}
                     target={currentCard}
                     session={session}
@@ -740,9 +737,9 @@ export default function MinderHub() {
 }
 
 // ============================================================================
-// SIMPLE SWIPE CARD - NO COMPLEX STACKING
+// SWIPE CARD COMPONENT
 // ============================================================================
-const SimpleSwipeCard = ({ target, session, isOwnCard, existingSwipe, onSwipe, isMobile }) => {
+const SwipeCard = ({ target, session, isOwnCard, existingSwipe, onSwipe, isMobile }) => {
   const [exitX, setExitX] = useState(0);
 
   const redFlagScore = target.redflag_score || calculateFallbackScore(target);
@@ -767,7 +764,6 @@ const SimpleSwipeCard = ({ target, session, isOwnCard, existingSwipe, onSwipe, i
     setTimeout(() => onSwipe(direction), 50);
   };
 
-  // Keyboard
   useEffect(() => {
     if (isOwnCard) return;
     
@@ -930,7 +926,7 @@ const SimpleSwipeCard = ({ target, session, isOwnCard, existingSwipe, onSwipe, i
 };
 
 // ============================================================================
-// FALLBACK SCORE
+// FALLBACK RED FLAG SCORE
 // ============================================================================
 function calculateFallbackScore(target) {
   let score = 10;
