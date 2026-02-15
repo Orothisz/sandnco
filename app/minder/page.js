@@ -71,7 +71,7 @@ export default function MinderHub() {
       
       setLoading(false);
     } catch (err) {
-      console.error("Load failed:", err);
+      console.error("❌ Load profiles failed:", err);
       setLoading(false);
     } finally {
       loadingMore.current = false;
@@ -85,18 +85,24 @@ export default function MinderHub() {
     if (!userId) return;
 
     try {
-      const { data: swipes } = await supabase
+      const { data: swipes, error } = await supabase
         .from('minder_swipes')
         .select('target_id, action')
         .eq('swiper_id', userId);
+      
+      if (error) {
+        console.error('❌ Load swipes error:', error);
+        return;
+      }
       
       if (swipes && mounted.current) {
         const swipeMap = new Map();
         swipes.forEach(s => swipeMap.set(s.target_id, s.action));
         setUserSwipes(swipeMap);
+        console.log('✅ Loaded', swipes.length, 'existing swipes');
       }
     } catch (err) {
-      console.error("Failed to load swipes:", err);
+      console.error("❌ Load swipes exception:", err);
     }
   }, [supabase]);
 
@@ -150,7 +156,7 @@ export default function MinderHub() {
         }, 800);
       }
     } catch (error) {
-      console.error('Leaderboard error:', error);
+      console.error('❌ Leaderboard error:', error);
       setLeaderboardUpdating(false);
     }
   }, [supabase, leaderboardUpdating]);
@@ -161,7 +167,6 @@ export default function MinderHub() {
   const setupRealtimeFeed = useCallback(() => {
     if (!mounted.current) return;
 
-    // Initial feed
     supabase
       .from('minder_targets')
       .select('id, alias')
@@ -177,7 +182,6 @@ export default function MinderHub() {
         }
       });
 
-    // Realtime subscription
     const channel = supabase
       .channel(`minder_live_${Date.now()}`)
       .on('postgres_changes', { 
@@ -265,18 +269,16 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // INFINITE LOOP - ADVANCE TO NEXT CARD
+  // INFINITE LOOP
   // --------------------------------------------------------------------------
   const advanceToNext = useCallback(() => {
     setCurrentIndex(prev => {
       const nextIndex = prev + 1;
       
-      // If we're near the end, load more profiles
       if (nextIndex >= allProfiles.length - 3) {
         loadProfiles(true);
       }
       
-      // Loop back to start if we somehow reach the end
       if (nextIndex >= allProfiles.length) {
         return 0;
       }
@@ -284,6 +286,138 @@ export default function MinderHub() {
       return nextIndex;
     });
   }, [allProfiles.length, loadProfiles]);
+
+  // --------------------------------------------------------------------------
+  // SAVE TO DATABASE - TRIPLE STRATEGY APPROACH
+  // --------------------------------------------------------------------------
+  const saveSwipeToDatabase = useCallback(async (targetId, action, swiperId) => {
+    console.log('💾 ========================================');
+    console.log('💾 SAVE ATTEMPT:', { targetId, action, swiperId });
+    
+    // STRATEGY 1: Try SELECT then UPDATE/INSERT
+    try {
+      console.log('💾 Strategy 1: SELECT -> UPDATE/INSERT');
+      
+      const { data: existing, error: selectError } = await supabase
+        .from('minder_swipes')
+        .select('id, action')
+        .eq('swiper_id', swiperId)
+        .eq('target_id', targetId)
+        .maybeSingle();
+
+      console.log('💾 SELECT result:', { existing, selectError });
+
+      if (selectError) {
+        console.error('❌ SELECT error:', selectError);
+        throw selectError;
+      }
+
+      if (existing) {
+        console.log('🔄 Record exists, UPDATING...');
+        const { data: updateData, error: updateError } = await supabase
+          .from('minder_swipes')
+          .update({ 
+            action, 
+            updated_at: new Date().toISOString() 
+          })
+          .eq('swiper_id', swiperId)
+          .eq('target_id', targetId)
+          .select();
+
+        if (updateError) {
+          console.error('❌ UPDATE error:', updateError);
+          throw updateError;
+        }
+
+        console.log('✅ UPDATE successful:', updateData);
+        return true;
+      } else {
+        console.log('➕ No existing record, INSERTING...');
+        const { data: insertData, error: insertError } = await supabase
+          .from('minder_swipes')
+          .insert({
+            swiper_id: swiperId,
+            target_id: targetId,
+            action,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select();
+
+        if (insertError) {
+          console.error('❌ INSERT error:', insertError);
+          throw insertError;
+        }
+
+        console.log('✅ INSERT successful:', insertData);
+        return true;
+      }
+    } catch (err1) {
+      console.error('❌ Strategy 1 failed:', err1);
+      console.log('💾 Trying Strategy 2: Direct UPSERT...');
+      
+      // STRATEGY 2: Try direct UPSERT
+      try {
+        const { data: upsertData, error: upsertError } = await supabase
+          .from('minder_swipes')
+          .upsert({
+            swiper_id: swiperId,
+            target_id: targetId,
+            action,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'swiper_id,target_id',
+            ignoreDuplicates: false
+          })
+          .select();
+
+        if (upsertError) {
+          console.error('❌ UPSERT error:', upsertError);
+          throw upsertError;
+        }
+
+        console.log('✅ UPSERT successful:', upsertData);
+        return true;
+      } catch (err2) {
+        console.error('❌ Strategy 2 failed:', err2);
+        console.log('💾 Trying Strategy 3: DELETE then INSERT...');
+        
+        // STRATEGY 3: DELETE then INSERT (nuclear option)
+        try {
+          await supabase
+            .from('minder_swipes')
+            .delete()
+            .eq('swiper_id', swiperId)
+            .eq('target_id', targetId);
+
+          const { data: insertData, error: insertError } = await supabase
+            .from('minder_swipes')
+            .insert({
+              swiper_id: swiperId,
+              target_id: targetId,
+              action,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select();
+
+          if (insertError) {
+            console.error('❌ Strategy 3 INSERT error:', insertError);
+            throw insertError;
+          }
+
+          console.log('✅ Strategy 3 successful:', insertData);
+          return true;
+        } catch (err3) {
+          console.error('❌ ALL STRATEGIES FAILED');
+          console.error('❌ Error details:', err3);
+          console.error('❌ Please check your database table structure');
+          console.error('❌ Run the SQL commands in fix-minder-swipes-table.sql');
+          return false;
+        }
+      }
+    }
+  }, [supabase]);
 
   // --------------------------------------------------------------------------
   // HANDLE SWIPE
@@ -304,7 +438,15 @@ export default function MinderHub() {
     const targetAlias = target?.alias || 'TARGET';
     const isChanging = existingSwipe && existingSwipe !== action;
 
-    console.log('🎯 Swipe:', { action, existingSwipe, isChanging });
+    console.log('🎯 ========================================');
+    console.log('🎯 USER ACTION:', { 
+      action, 
+      existingSwipe, 
+      isChanging,
+      targetId,
+      targetAlias,
+      userId: session.user.id
+    });
 
     setShowInstructions(false);
 
@@ -317,7 +459,8 @@ export default function MinderHub() {
       navigator.vibrate(action === 'SMASH' ? [10, 5, 10] : 15);
     }
 
-    // Update local state immediately
+    // Optimistic update
+    const previousSwipe = userSwipes.get(targetId);
     setUserSwipes(prev => new Map(prev).set(targetId, action));
     setFeed(prev => [{ 
       id: `local-${Date.now()}`, 
@@ -325,46 +468,37 @@ export default function MinderHub() {
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
 
-    // Advance to next card
+    // Advance
     advanceToNext();
 
     // Save to database
-    try {
-      const { error } = await supabase.from('minder_swipes').upsert(
-        { 
-          swiper_id: session.user.id, 
-          target_id: targetId, 
-          action
-        },
-        { onConflict: 'swiper_id,target_id' }
-      );
+    const success = await saveSwipeToDatabase(targetId, action, session.user.id);
 
-      if (error) {
-        console.error('❌ Database save failed:', error);
-        // Revert on error
-        setUserSwipes(prev => {
-          const newMap = new Map(prev);
-          if (existingSwipe) {
-            newMap.set(targetId, existingSwipe);
-          } else {
-            newMap.delete(targetId);
-          }
-          return newMap;
-        });
-      } else {
-        console.log(`✅ Database ${isChanging ? 'updated' : 'saved'}:`, action, 'on', targetAlias);
-        
-        if (action === 'SMASH' || isChanging) {
-          refreshLeaderboard();
+    if (!success) {
+      console.error('❌ DATABASE SAVE FAILED - REVERTING UI');
+      alert('⚠️ Database save failed. Please check console and run the SQL fix commands.');
+      
+      // Revert
+      setUserSwipes(prev => {
+        const newMap = new Map(prev);
+        if (previousSwipe) {
+          newMap.set(targetId, previousSwipe);
+        } else {
+          newMap.delete(targetId);
         }
+        return newMap;
+      });
+    } else {
+      console.log(`✅ ========================================`);
+      console.log(`✅ SUCCESS: ${isChanging ? 'CHANGED TO' : 'SAVED'} ${action}`);
+      
+      if (action === 'SMASH' || isChanging) {
+        setTimeout(() => refreshLeaderboard(), 500);
       }
-    } catch (err) {
-      console.error('❌ Database exception:', err);
     }
 
-  }, [session, allProfiles, supabase, refreshLeaderboard, advanceToNext]);
+  }, [session, allProfiles, userSwipes, advanceToNext, saveSwipeToDatabase, refreshLeaderboard]);
 
-  // Get current card
   const currentCard = allProfiles[currentIndex];
   const hasCards = allProfiles.length > 0;
 
@@ -489,13 +623,13 @@ export default function MinderHub() {
           </h1>
           <div className="flex gap-2">
             <button 
-              onClick={() => { setMobileLeaderboardOpen(true); }}
+              onClick={() => setMobileLeaderboardOpen(true)}
               className="bg-black/60 border border-white/10 p-3 rounded-full text-yellow-500 active:scale-90 transition-transform"
             >
               <Trophy className="w-4 h-4" />
             </button>
             <button 
-              onClick={() => { setMobileHudOpen(true); }}
+              onClick={() => setMobileHudOpen(true)}
               className="bg-black/60 border border-white/10 p-3 rounded-full text-emerald-400 active:scale-90 transition-transform"
             >
               <Activity className="w-4 h-4" />
@@ -688,7 +822,7 @@ export default function MinderHub() {
               MINDER<span className="text-pink-600">_</span>
             </h1>
             <p className="text-[10px] font-black text-pink-500 uppercase bg-pink-900/20 px-4 py-1.5 rounded-full border border-pink-500/20 mt-3">
-              INFINITE LOOP
+              DEBUG MODE
             </p>
           </div>
 
@@ -925,9 +1059,6 @@ const SwipeCard = ({ target, session, isOwnCard, existingSwipe, onSwipe, isMobil
   );
 };
 
-// ============================================================================
-// FALLBACK RED FLAG SCORE
-// ============================================================================
 function calculateFallbackScore(target) {
   let score = 10;
   const bioLower = String(target.bio || "").toLowerCase();
