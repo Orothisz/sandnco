@@ -334,11 +334,28 @@ export default function MinderHub() {
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
 
-    // Fire and forget
-    supabase.from('minder_swipes').upsert(
-      { swiper_id: session.user.id, target_id: targetId, action },
-      { onConflict: 'swiper_id, target_id' }
-    );
+    // Save to database with error handling
+    supabase.from('minder_swipes')
+      .upsert(
+        { 
+          swiper_id: session.user.id, 
+          target_id: targetId, 
+          action 
+        },
+        { onConflict: 'swiper_id,target_id' }
+      )
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('❌ Failed to save swipe:', error);
+          console.error('Attempted to save:', { 
+            swiper_id: session.user.id, 
+            target_id: targetId, 
+            action 
+          });
+        } else {
+          console.log('✅ Swipe saved successfully:', action, 'on', targetAlias);
+        }
+      });
 
   }, [currentIndex, profiles, session, supabase]);
 
@@ -797,10 +814,14 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
       )}
 
       {existingSwipe && isTop && !isOwnCard && (
-        <div className={`absolute top-8 left-0 w-full ${existingSwipe === 'SMASH' ? 'bg-green-500 text-black' : 'bg-red-600 text-white'} py-2 font-black text-center text-[9px] uppercase z-30 flex justify-center items-center gap-2`}>
-          {existingSwipe === 'SMASH' ? <Heart className="w-3 h-3 fill-current" /> : <ThumbsDown className="w-3 h-3 fill-current" />}
-          {existingSwipe}ED
-        </div>
+        <motion.div 
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className={`absolute top-8 left-0 w-full ${existingSwipe === 'SMASH' ? 'bg-green-500 text-black' : 'bg-red-600 text-white'} py-2 font-black text-center text-[10px] uppercase z-30 flex justify-center items-center gap-2 shadow-lg`}
+        >
+          {existingSwipe === 'SMASH' ? <Heart className="w-4 h-4 fill-current" /> : <ThumbsDown className="w-4 h-4 fill-current" />}
+          PREVIOUSLY {existingSwipe}ED
+        </motion.div>
       )}
 
       {isTop && !isOwnCard && (
@@ -896,7 +917,41 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
               >
                 <X className="w-5 h-5" /> DISMISS
               </button>
+            ) : existingSwipe ? (
+              // User has already swiped - show keep or change buttons
+              existingSwipe === 'SMASH' ? (
+                <>
+                  <button 
+                    onClick={() => processSwipe('right')}
+                    className="flex-1 bg-green-900 border-2 border-green-500 text-green-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-800 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                  >
+                    <Heart className="w-5 h-5 fill-current"/> KEEP SMASH
+                  </button>
+                  <button 
+                    onClick={() => processSwipe('left')}
+                    className="flex-1 bg-black border-2 border-red-600/50 text-red-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-950/40 hover:border-red-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                  >
+                    <ThumbsDown className="w-5 h-5"/> CHANGE TO PASS
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => processSwipe('left')}
+                    className="flex-1 bg-red-900 border-2 border-red-500 text-red-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                  >
+                    <ThumbsDown className="w-5 h-5 fill-current"/> KEEP PASS
+                  </button>
+                  <button 
+                    onClick={() => processSwipe('right')}
+                    className="flex-1 bg-black border-2 border-green-500/50 text-green-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-950/40 hover:border-green-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                  >
+                    <Heart className="w-5 h-5"/> CHANGE TO SMASH
+                  </button>
+                </>
+              )
             ) : (
+              // Fresh profile - show normal buttons
               <>
                 <button 
                   onClick={() => processSwipe('left')}
