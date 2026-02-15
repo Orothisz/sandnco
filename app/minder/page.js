@@ -60,7 +60,7 @@ export default function MinderHub() {
   // --------------------------------------------------------------------------
   const loadCriticalData = useCallback(async (activeSession) => {
     try {
-      const limit = isMobile.current ? 8 : 12;
+      const limit = 5; // Reduced for instant mobile load
       
       const { data: rawProfiles, error } = await supabase
         .from('minder_targets')
@@ -331,7 +331,25 @@ export default function MinderHub() {
             table: 'minder_swipes'
           }, async (payload) => {
             if (!mounted.current) return;
-            console.log('🔄 Swipe updated, refreshing leaderboard...');
+            
+            console.log('🔄 Swipe UPDATE detected:', payload.new);
+            
+            // Get target info for feed
+            const { data: t } = await supabase
+              .from('minder_targets')
+              .select('alias')
+              .eq('id', payload.new.target_id)
+              .single();
+            
+            // Update feed to show the change
+            setFeed(prev => [{
+              id: `update-${payload.new.id}-${Date.now()}`,
+              text: `> AGENT CHANGED TO ${payload.new.action} [${t?.alias || 'ANON'}]`,
+              color: payload.new.action === 'SMASH' ? 'text-green-500' : 'text-red-500'
+            }, ...prev].slice(0, 15));
+            
+            // Refresh leaderboard
+            console.log('🔄 Refreshing leaderboard after update...');
             refreshLeaderboard();
           })
           .on('postgres_changes', {
@@ -376,98 +394,77 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // INTERACTION HANDLER WITH SUBTLE HAPTIC FEEDBACK
+  // INTERACTION HANDLER - FIXED FOR REAL
   // --------------------------------------------------------------------------
-  const executeSwipe = useCallback((direction, targetId, isOwnCard, existingSwipe) => {
+  const executeSwipe = useCallback(async (direction, targetId, isOwnCard, existingSwipe) => {
     if (!session && !isOwnCard) {
       setAuthModal(true);
+      return;
+    }
+
+    if (isOwnCard || direction === 'dismiss') {
+      setCurrentIndex(prev => prev + 1 >= profiles.length ? 0 : prev + 1);
       return;
     }
 
     const action = direction === 'right' ? 'SMASH' : 'PASS';
     const targetAlias = profiles[currentIndex]?.alias || 'TARGET';
     const isChanging = existingSwipe && existingSwipe !== action;
+    const isKeeping = existingSwipe && existingSwipe === action;
 
-    // Hide instructions on first swipe
+    console.log('🎯 Swipe:', { action, existingSwipe, isChanging, isKeeping });
+
     setShowInstructions(false);
 
-    // Show subtle feedback
-    if (!isOwnCard && direction !== 'dismiss') {
-      setSwipeFeedback({ action, id: `feedback-${Date.now()}` });
-      setTimeout(() => setSwipeFeedback(null), 1200);
+    // Feedback
+    setSwipeFeedback({ action, id: `feedback-${Date.now()}` });
+    setTimeout(() => setSwipeFeedback(null), 1200);
+
+    // Haptic
+    if ('vibrate' in navigator) {
+      navigator.vibrate(action === 'SMASH' ? [10, 5, 10] : 15);
     }
 
-    // Subtle haptic feedback (mobile only)
-    if (!isOwnCard && direction !== 'dismiss' && 'vibrate' in navigator) {
-      if (action === 'SMASH') {
-        navigator.vibrate([10, 5, 10]); // Double tap pattern
-      } else {
-        navigator.vibrate(15); // Single short pulse
-      }
-    }
-
-    // Only advance to next card if it's a NEW swipe or keeping the same choice
-    // Don't advance if changing from SMASH to PASS or vice versa
-    if (!isChanging && !existingSwipe) {
-      setCurrentIndex(prev => {
-        const next = prev + 1;
-        return next >= profiles.length ? 0 : next;
-      });
-    }
-
-    if (isOwnCard || direction === 'dismiss') return;
-
-    // Optimistic update
+    // Update state FIRST before any async operations
     setUserSwipes(prev => new Map(prev).set(targetId, action));
     setFeed(prev => [{ 
       id: `local-${Date.now()}`, 
-      text: isChanging ? `> YOU CHANGED TO ${action} [${targetAlias}]` : `> YOU ${action}ED [${targetAlias}]`, 
+      text: `> YOU ${isChanging ? 'CHANGED TO' : ''} ${action}ED [${targetAlias}]`, 
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
 
-    // Save to database with error handling
-    supabase.from('minder_swipes')
-      .upsert(
+    // Advance card for new swipes or keeping same
+    // Don't advance if changing - let user see the update
+    if (!isChanging) {
+      setCurrentIndex(prev => prev + 1 >= profiles.length ? 0 : prev + 1);
+    }
+
+    // Save to database
+    try {
+      const { error } = await supabase.from('minder_swipes').upsert(
         { 
           swiper_id: session.user.id, 
           target_id: targetId, 
-          action,
-          updated_at: new Date().toISOString()
+          action
         },
         { onConflict: 'swiper_id,target_id' }
-      )
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('❌ Failed to save swipe:', error);
-          console.error('Attempted to save:', { 
-            swiper_id: session.user.id, 
-            target_id: targetId, 
-            action 
-          });
-          // Revert optimistic update on error
-          setUserSwipes(prev => {
-            const newMap = new Map(prev);
-            if (existingSwipe) {
-              newMap.set(targetId, existingSwipe);
-            } else {
-              newMap.delete(targetId);
-            }
-            return newMap;
-          });
-        } else {
-          console.log(`✅ Swipe ${isChanging ? 'changed' : 'saved'} successfully:`, action, 'on', targetAlias);
-          
-          // If user is changing their mind, advance to next card after successful save
-          if (isChanging) {
-            setTimeout(() => {
-              setCurrentIndex(prev => {
-                const next = prev + 1;
-                return next >= profiles.length ? 0 : next;
-              });
-            }, 600); // Small delay so user sees the change
-          }
-        }
-      });
+      );
+
+      if (error) {
+        console.error('❌ Save failed:', error);
+        // Revert on error
+        setUserSwipes(prev => {
+          const newMap = new Map(prev);
+          if (existingSwipe) newMap.set(targetId, existingSwipe);
+          else newMap.delete(targetId);
+          return newMap;
+        });
+      } else {
+        console.log('✅ Saved:', action);
+      }
+    } catch (err) {
+      console.error('❌ Exception:', err);
+    }
 
   }, [currentIndex, profiles, session, supabase]);
 
