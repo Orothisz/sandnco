@@ -467,7 +467,7 @@ export default function Home() {
                  
                  <div className="inline-block bg-pink-950/40 border-l-4 border-pink-500 p-3 md:p-4 mb-6 md:mb-8 rounded-r-xl max-w-xl text-left shadow-md">
                     <p className="text-[9px] md:text-xs font-mono text-pink-300 font-bold uppercase tracking-widest leading-relaxed">
-                      "Couldn't add the 'T' cuz we aren't rich enough and can't afford lawsuits."
+                      "Couldn't add the 'T' cuz we can't afford lawsuits."
                     </p>
                  </div>
 
