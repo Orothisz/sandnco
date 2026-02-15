@@ -42,6 +42,7 @@ export default function MinderHub() {
   
   // ANIMATION STATE
   const [showInstructions, setShowInstructions] = useState(true);
+  const [swipeFeedback, setSwipeFeedback] = useState(null); // { action: 'SMASH' | 'PASS', id: string }
   
   // Hydration flags
   const hydrationStarted = useRef(false);
@@ -118,44 +119,67 @@ export default function MinderHub() {
             }
           }),
         
-        // FIXED LEADERBOARD: Proper aggregation
+        // FIXED LEADERBOARD: Proper aggregation with error handling
         supabase
           .from('minder_swipes')
           .select('target_id')
           .eq('action', 'SMASH')
-          .then(async ({ data: swipes }) => {
-            if (!swipes || !mounted.current) return;
+          .then(async ({ data: swipes, error }) => {
+            if (error) {
+              console.error('Leaderboard swipes error:', error);
+              return;
+            }
+            
+            if (!swipes || swipes.length === 0 || !mounted.current) {
+              console.log('No swipes found for leaderboard');
+              return;
+            }
             
             // Count smashes per target
             const counts = {};
             swipes.forEach(s => {
-              counts[s.target_id] = (counts[s.target_id] || 0) + 1;
+              if (s.target_id) {
+                counts[s.target_id] = (counts[s.target_id] || 0) + 1;
+              }
             });
             
-            // Get top 3 target IDs
-            const topEntries = Object.entries(counts)
+            console.log('Smash counts:', counts);
+            
+            // Get top 3 entries
+            const entries = Object.entries(counts);
+            if (entries.length === 0) {
+              console.log('No entries to display');
+              return;
+            }
+            
+            const topEntries = entries
               .sort(([, a], [, b]) => b - a)
               .slice(0, 3);
             
-            if (topEntries.length === 0) return;
-            
             const topIds = topEntries.map(([id]) => id);
+            console.log('Top IDs:', topIds);
             
             // Fetch full target info
-            const { data: leaders } = await supabase
+            const { data: leaders, error: leadersError } = await supabase
               .from('minder_targets')
               .select('id, alias, image_url')
               .in('id', topIds);
             
+            if (leadersError) {
+              console.error('Leaderboard targets error:', leadersError);
+              return;
+            }
+            
             if (leaders && mounted.current) {
-              // Map scores and sort
+              // Map scores and sort by count
               const leaderboardData = leaders
                 .map(t => ({ 
                   ...t, 
-                  score: counts[t.id] 
+                  score: counts[t.id] || 0
                 }))
                 .sort((a, b) => b.score - a.score);
               
+              console.log('Final leaderboard:', leaderboardData);
               setLeaderboard(leaderboardData);
             }
           })
@@ -233,6 +257,12 @@ export default function MinderHub() {
 
     // Hide instructions on first swipe
     setShowInstructions(false);
+
+    // Show subtle feedback
+    if (!isOwnCard && direction !== 'dismiss') {
+      setSwipeFeedback({ action, id: `feedback-${Date.now()}` });
+      setTimeout(() => setSwipeFeedback(null), 1200);
+    }
 
     // Subtle haptic feedback (mobile only)
     if (!isOwnCard && direction !== 'dismiss' && 'vibrate' in navigator) {
@@ -327,6 +357,34 @@ export default function MinderHub() {
                 <div className="text-xs font-mono bg-green-950/50 px-2 py-1 rounded border border-green-500/30">→</div>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ====================================================================== */}
+      {/* SUBTLE SWIPE FEEDBACK */}
+      {/* ====================================================================== */}
+      <AnimatePresence>
+        {swipeFeedback && (
+          <motion.div
+            key={swipeFeedback.id}
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-24 md:top-32 left-1/2 -translate-x-1/2 z-[1300] pointer-events-none"
+          >
+            {swipeFeedback.action === 'SMASH' ? (
+              <div className="flex items-center gap-3 bg-green-500/90 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg">
+                <Heart className="w-5 h-5 text-white fill-white" />
+                <span className="text-sm font-black text-white uppercase tracking-wider">Smashed</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 bg-red-500/90 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg">
+                <ThumbsDown className="w-5 h-5 text-white fill-white" />
+                <span className="text-sm font-black text-white uppercase tracking-wider">Passed</span>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -606,8 +664,13 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
   const scale = isTop ? 1 : 1 - (depthIndex * 0.04);
   const yOffset = isTop ? 0 : depthIndex * 16;
   
-  const smashOpacity = useTransform(x, [50, 150], [0, 1]);
-  const passOpacity = useTransform(x, [-50, -150], [0, 1]);
+  // Dynamic opacity based on swipe direction
+  const smashOpacity = useTransform(x, [0, 100], [0, 1]);
+  const passOpacity = useTransform(x, [0, -100], [0, 1]);
+  
+  // Text opacity - only show when actually swiping
+  const smashTextOpacity = useTransform(x, [30, 100], [0, 1]);
+  const passTextOpacity = useTransform(x, [-30, -100], [0, 1]);
 
   useEffect(() => {
     if (!isTop || isOwnCard) return;
@@ -697,17 +760,46 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
 
       {isTop && !isOwnCard && (
         <>
+          {/* Right swipe indicator - SMASH */}
           <motion.div 
             style={{ opacity: smashOpacity }} 
-            className="absolute top-28 left-6 md:left-10 border-8 border-green-500 text-green-400 font-black text-6xl md:text-7xl px-8 py-2 rounded-3xl rotate-[-15deg] uppercase z-20 bg-black/40 pointer-events-none"
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-green-500/20 to-green-500/40 pointer-events-none z-20"
+          />
+          <motion.div
+            style={{ opacity: smashTextOpacity }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
           >
-            SMASH
+            <div className="flex flex-col items-center gap-4">
+              <Heart className="w-20 h-20 md:w-24 md:h-24 text-green-500 fill-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.8)]" />
+              <div className="text-4xl md:text-5xl font-black text-green-500 uppercase tracking-wider drop-shadow-[0_0_20px_rgba(34,197,94,0.8)]">
+                SMASH
+              </div>
+              <div className="flex items-center gap-2 text-green-400 text-sm font-bold">
+                <ArrowRight className="w-5 h-5" />
+                <span>Swipe Right</span>
+              </div>
+            </div>
           </motion.div>
+
+          {/* Left swipe indicator - PASS */}
           <motion.div 
             style={{ opacity: passOpacity }} 
-            className="absolute top-28 right-6 md:right-10 border-8 border-red-600 text-red-500 font-black text-6xl md:text-7xl px-8 py-2 rounded-3xl rotate-[15deg] uppercase z-20 bg-black/40 pointer-events-none"
+            className="absolute inset-0 bg-gradient-to-l from-transparent via-red-500/20 to-red-500/40 pointer-events-none z-20"
+          />
+          <motion.div
+            style={{ opacity: passTextOpacity }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
           >
-            PASS
+            <div className="flex flex-col items-center gap-4">
+              <ThumbsDown className="w-20 h-20 md:w-24 md:h-24 text-red-500 fill-red-500 drop-shadow-[0_0_20px_rgba(220,38,38,0.8)]" />
+              <div className="text-4xl md:text-5xl font-black text-red-500 uppercase tracking-wider drop-shadow-[0_0_20px_rgba(220,38,38,0.8)]">
+                PASS
+              </div>
+              <div className="flex items-center gap-2 text-red-400 text-sm font-bold">
+                <span>Swipe Left</span>
+                <ArrowLeft className="w-5 h-5" />
+              </div>
+            </div>
           </motion.div>
         </>
       )}
