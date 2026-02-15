@@ -5,12 +5,13 @@ import { motion, useAnimation, useMotionValue, useTransform, AnimatePresence } f
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   Lock, Activity, Terminal, ChevronLeft, Radar, Zap, User, X, 
-  Crosshair, Heart, ThumbsDown, EyeOff, Trophy, Flame, ArrowUpRight, Edit2
+  Crosshair, Heart, ThumbsDown, EyeOff, Trophy, Flame, ArrowUpRight, Edit2,
+  ArrowLeft, ArrowRight, Sparkles
 } from "lucide-react";
 import Link from "next/link";
 
 // ============================================================================
-// MOBILE-FIRST INSTANT RENDER ENGINE (v16.0)
+// MOBILE-FIRST INSTANT RENDER ENGINE (v17.0 - EXCITING ANIMATIONS)
 // ============================================================================
 
 // Device detection
@@ -23,13 +24,13 @@ export default function MinderHub() {
   const supabase = createClientComponentClient();
   const isMobile = useRef(isMobileDevice());
   
-  // CORE STATE - Minimal for first paint
+  // CORE STATE
   const [session, setSession] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userSwipes, setUserSwipes] = useState(new Map());
   
-  // DEFERRED STATE - Loaded after render
+  // DEFERRED STATE
   const [feed, setFeed] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   
@@ -39,16 +40,25 @@ export default function MinderHub() {
   const [mobileHudOpen, setMobileHudOpen] = useState(false);
   const [mobileLeaderboardOpen, setMobileLeaderboardOpen] = useState(false);
   
+  // ANIMATION STATE
+  const [showInstructions, setShowInstructions] = useState(true);
+  const [celebrationAnimation, setCelebrationAnimation] = useState(null); // 'smash' or 'pass'
+  
   // Hydration flags
   const hydrationStarted = useRef(false);
   const mounted = useRef(true);
+
+  // Hide instructions after 5 seconds or first swipe
+  useEffect(() => {
+    const timer = setTimeout(() => setShowInstructions(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // --------------------------------------------------------------------------
   // CRITICAL PATH: Load ONLY what's needed for first paint
   // --------------------------------------------------------------------------
   const loadCriticalData = useCallback(async (activeSession) => {
     try {
-      // ONLY fetch minimal deck - 8 profiles max for instant render
       const limit = isMobile.current ? 8 : 12;
       
       const { data: rawProfiles, error } = await supabase
@@ -60,7 +70,7 @@ export default function MinderHub() {
       if (error) throw error;
       if (!rawProfiles || !mounted.current) return;
 
-      // If user is logged in, fetch swipes in parallel (non-blocking)
+      // Fetch swipes in parallel (non-blocking)
       let swipeMap = new Map();
       if (activeSession?.user?.id) {
         supabase
@@ -75,11 +85,8 @@ export default function MinderHub() {
           });
       }
 
-      // Set profiles immediately - no reordering, no preloading
       setProfiles(rawProfiles);
       setLoading(false);
-
-      // Native lazy loading handles images - no manual preload
       
     } catch (err) {
       console.error("Critical load failed:", err);
@@ -94,7 +101,6 @@ export default function MinderHub() {
     if (hydrationStarted.current || !mounted.current) return;
     hydrationStarted.current = true;
 
-    // Wait for browser idle time
     const runHydration = () => {
       Promise.all([
         // Feed
@@ -113,7 +119,7 @@ export default function MinderHub() {
             }
           }),
         
-        // Leaderboard
+        // FIXED LEADERBOARD: Proper aggregation
         supabase
           .from('minder_swipes')
           .select('target_id')
@@ -121,31 +127,42 @@ export default function MinderHub() {
           .then(async ({ data: swipes }) => {
             if (!swipes || !mounted.current) return;
             
-            const counts = swipes.reduce((acc, s) => {
-              acc[s.target_id] = (acc[s.target_id] || 0) + 1;
-              return acc;
-            }, {});
+            // Count smashes per target
+            const counts = {};
+            swipes.forEach(s => {
+              counts[s.target_id] = (counts[s.target_id] || 0) + 1;
+            });
             
-            const topIds = Object.keys(counts)
-              .sort((a, b) => counts[b] - counts[a])
+            // Get top 3 target IDs
+            const topEntries = Object.entries(counts)
+              .sort(([, a], [, b]) => b - a)
               .slice(0, 3);
             
+            if (topEntries.length === 0) return;
+            
+            const topIds = topEntries.map(([id]) => id);
+            
+            // Fetch full target info
             const { data: leaders } = await supabase
               .from('minder_targets')
               .select('id, alias, image_url')
               .in('id', topIds);
             
             if (leaders && mounted.current) {
-              setLeaderboard(
-                leaders
-                  .map(t => ({ ...t, score: counts[t.id] }))
-                  .sort((a, b) => b.score - a.score)
-              );
+              // Map scores and sort
+              const leaderboardData = leaders
+                .map(t => ({ 
+                  ...t, 
+                  score: counts[t.id] 
+                }))
+                .sort((a, b) => b.score - a.score);
+              
+              setLeaderboard(leaderboardData);
             }
           })
       ]);
 
-      // Real-time subscription - lowest priority
+      // Real-time subscription
       setTimeout(() => {
         if (!mounted.current) return;
         
@@ -183,20 +200,16 @@ export default function MinderHub() {
   }, [supabase]);
 
   // --------------------------------------------------------------------------
-  // BOOT SEQUENCE: Auth check → Critical data → Render → Hydrate
+  // BOOT SEQUENCE
   // --------------------------------------------------------------------------
   useEffect(() => {
     mounted.current = true;
 
     const boot = async () => {
-      // Auth check (fast, local session)
       const { data: { session: activeSession } } = await supabase.auth.getSession();
       if (mounted.current) setSession(activeSession);
       
-      // Critical path
       await loadCriticalData(activeSession);
-      
-      // Deferred hydration after render
       hydrateSecondaryData();
     };
     
@@ -205,10 +218,10 @@ export default function MinderHub() {
     return () => {
       mounted.current = false;
     };
-  }, []); // Stable deps only
+  }, []);
 
   // --------------------------------------------------------------------------
-  // INTERACTION HANDLER
+  // INTERACTION HANDLER WITH CELEBRATION
   // --------------------------------------------------------------------------
   const executeSwipe = useCallback((direction, targetId, isOwnCard) => {
     if (!session && !isOwnCard) {
@@ -219,7 +232,16 @@ export default function MinderHub() {
     const action = direction === 'right' ? 'SMASH' : 'PASS';
     const targetAlias = profiles[currentIndex]?.alias || 'TARGET';
 
-    // Update index immediately
+    // Hide instructions on first swipe
+    setShowInstructions(false);
+
+    // Trigger celebration animation
+    if (!isOwnCard && direction !== 'dismiss') {
+      setCelebrationAnimation(action);
+      setTimeout(() => setCelebrationAnimation(null), 2000);
+    }
+
+    // Update index
     setCurrentIndex(prev => {
       const next = prev + 1;
       return next >= profiles.length ? 0 : next;
@@ -243,7 +265,6 @@ export default function MinderHub() {
 
   }, [currentIndex, profiles, session, supabase]);
 
-  // Visible cards for rendering
   const visibleCards = profiles
     .slice(currentIndex, currentIndex + 3)
     .map((target, idx) => ({
@@ -256,7 +277,7 @@ export default function MinderHub() {
   return (
     <div className="h-[100dvh] bg-[#000000] text-white overflow-hidden flex flex-col md:flex-row font-mono relative touch-none select-none">
       
-      {/* Simplified background - no expensive effects on mobile */}
+      {/* Background */}
       <div className="fixed inset-0 pointer-events-none z-0">
         {!isMobile.current && (
           <>
@@ -266,6 +287,190 @@ export default function MinderHub() {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black" />
       </div>
+
+      {/* ====================================================================== */}
+      {/* CELEBRATION OVERLAY */}
+      {/* ====================================================================== */}
+      <AnimatePresence>
+        {celebrationAnimation && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.5 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="fixed inset-0 z-[1500] flex items-center justify-center pointer-events-none"
+          >
+            {celebrationAnimation === 'SMASH' ? (
+              <div className="flex flex-col items-center gap-6">
+                <motion.div
+                  animate={{ 
+                    rotate: [0, -10, 10, -10, 0],
+                    scale: [1, 1.2, 1, 1.2, 1]
+                  }}
+                  transition={{ duration: 0.5, repeat: 2 }}
+                  className="relative"
+                >
+                  <Heart className="w-32 h-32 md:w-48 md:h-48 text-green-500 fill-green-500 drop-shadow-[0_0_50px_rgba(34,197,94,1)]" />
+                  {/* Explosion particles */}
+                  {[...Array(8)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 1, scale: 0 }}
+                      animate={{ 
+                        opacity: 0,
+                        scale: 1,
+                        x: Math.cos((i / 8) * Math.PI * 2) * 150,
+                        y: Math.sin((i / 8) * Math.PI * 2) * 150
+                      }}
+                      transition={{ duration: 1, ease: "easeOut" }}
+                      className="absolute top-1/2 left-1/2 w-4 h-4 bg-green-500 rounded-full"
+                    />
+                  ))}
+                </motion.div>
+                <motion.h1 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-6xl md:text-8xl font-black text-green-500 uppercase tracking-wider drop-shadow-[0_0_50px_rgba(34,197,94,1)]"
+                >
+                  SMASH!
+                </motion.h1>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-xl md:text-2xl text-green-400 font-bold uppercase tracking-widest flex items-center gap-3"
+                >
+                  <Sparkles className="w-6 h-6" />
+                  It's a Match!
+                  <Sparkles className="w-6 h-6" />
+                </motion.div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-6">
+                <motion.div
+                  animate={{ 
+                    rotate: [0, 15, -15, 15, 0],
+                  }}
+                  transition={{ duration: 0.4, repeat: 2 }}
+                >
+                  <ThumbsDown className="w-32 h-32 md:w-48 md:h-48 text-red-500 fill-red-500 drop-shadow-[0_0_50px_rgba(220,38,38,1)]" />
+                  {/* Smoke particles */}
+                  {[...Array(6)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0.8, scale: 0.5, y: 0 }}
+                      animate={{ 
+                        opacity: 0,
+                        scale: 2,
+                        y: -100
+                      }}
+                      transition={{ duration: 1.5, delay: i * 0.1, ease: "easeOut" }}
+                      className="absolute top-0 left-1/2 w-8 h-8 bg-red-900/50 rounded-full blur-xl"
+                    />
+                  ))}
+                </motion.div>
+                <motion.h1 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-6xl md:text-8xl font-black text-red-500 uppercase tracking-wider drop-shadow-[0_0_50px_rgba(220,38,38,1)]"
+                >
+                  PASS!
+                </motion.h1>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="text-xl md:text-2xl text-red-400 font-bold uppercase tracking-widest"
+                >
+                  Next Target...
+                </motion.div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ====================================================================== */}
+      {/* SWIPE INSTRUCTIONS OVERLAY */}
+      {/* ====================================================================== */}
+      <AnimatePresence>
+        {showInstructions && !loading && profiles.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1400] flex items-center justify-center pointer-events-none"
+          >
+            {/* Mobile Instructions */}
+            <div className="md:hidden flex flex-col items-center gap-8">
+              <motion.div
+                animate={{ x: [-30, 30, -30] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                className="flex items-center gap-4 bg-black/80 backdrop-blur-xl px-8 py-6 rounded-3xl border-2 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.3)]"
+              >
+                <ArrowLeft className="w-10 h-10 text-red-500" />
+                <div className="text-center">
+                  <div className="text-2xl font-black text-red-500 uppercase">Swipe Left</div>
+                  <div className="text-xs text-red-400 font-bold mt-1">to PASS</div>
+                </div>
+              </motion.div>
+              
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="text-sm text-gray-400 font-bold uppercase tracking-widest"
+              >
+                or tap buttons below
+              </motion.div>
+              
+              <motion.div
+                animate={{ x: [30, -30, 30] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                className="flex items-center gap-4 bg-black/80 backdrop-blur-xl px-8 py-6 rounded-3xl border-2 border-green-500/50 shadow-[0_0_50px_rgba(34,197,94,0.3)]"
+              >
+                <div className="text-center">
+                  <div className="text-2xl font-black text-green-500 uppercase">Swipe Right</div>
+                  <div className="text-xs text-green-400 font-bold mt-1">to SMASH</div>
+                </div>
+                <ArrowRight className="w-10 h-10 text-green-500" />
+              </motion.div>
+            </div>
+
+            {/* Desktop Instructions */}
+            <div className="hidden md:flex items-center gap-12">
+              <motion.div
+                animate={{ x: [-20, -40, -20] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                className="flex flex-col items-center gap-4 bg-black/80 backdrop-blur-xl px-10 py-8 rounded-3xl border-2 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.3)]"
+              >
+                <div className="flex items-center gap-4">
+                  <ArrowLeft className="w-12 h-12 text-red-500" />
+                  <div className="text-3xl font-black text-red-500 uppercase">Left Arrow</div>
+                </div>
+                <div className="text-sm text-red-400 font-bold uppercase tracking-widest">or Click PASS</div>
+              </motion.div>
+              
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="text-lg text-gray-400 font-bold uppercase tracking-widest"
+              >
+                - OR -
+              </motion.div>
+              
+              <motion.div
+                animate={{ x: [20, 40, 20] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                className="flex flex-col items-center gap-4 bg-black/80 backdrop-blur-xl px-10 py-8 rounded-3xl border-2 border-green-500/50 shadow-[0_0_50px_rgba(34,197,94,0.3)]"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="text-3xl font-black text-green-500 uppercase">Right Arrow</div>
+                  <ArrowRight className="w-12 h-12 text-green-500" />
+                </div>
+                <div className="text-sm text-green-400 font-bold uppercase tracking-widest">or Click SMASH</div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Auth Modal */}
       <AnimatePresence>
@@ -530,13 +735,12 @@ export default function MinderHub() {
 }
 
 // ============================================================================
-// INSTANT SWIPE CARD - Zero async operations
+// SWIPE CARD WITH ENHANCED VISUAL FEEDBACK
 // ============================================================================
 const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, existingSwipe, onExecuteSwipe, isMobile }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
   
-  // USE PRECOMPUTED SCORE - No API calls
   const redFlagScore = target.redflag_score || calculateFallbackScore(target);
   
   const rotate = useTransform(x, [-200, 200], [-15, 15]);
@@ -568,7 +772,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
       y: exitY, 
       rotate: exitRotate, 
       opacity: 0, 
-      transition: { duration: 0.2, ease: "easeOut" } 
+      transition: { duration: 0.3, ease: "easeOut" } 
     });
     
     onExecuteSwipe(direction);
@@ -604,12 +808,10 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
       className={`absolute inset-0 md:inset-auto md:w-full md:h-full rounded-[2.5rem] md:rounded-[3rem] bg-[#050505] overflow-hidden flex flex-col ${!isTop && 'opacity-80'} ${isOwnCard && isTop ? 'border border-yellow-500' : 'border border-white/10'}`}
       style={{ willChange: isTop ? 'transform' : 'auto' }}
     >
-      {/* Simplified shadows on mobile */}
       {!isMobile && (
         <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none z-10 rounded-[2.5rem] md:rounded-[3rem]" />
       )}
       
-      {/* Native lazy loading - no manual preload */}
       <img 
         src={target?.image_url || ''} 
         alt={safeAlias} 
@@ -702,13 +904,13 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
               <>
                 <button 
                   onClick={() => processSwipe('left')}
-                  className="flex-1 bg-black border border-red-600/50 text-red-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl transition-colors flex items-center justify-center gap-2 active:scale-95"
+                  className="flex-1 bg-black border-2 border-red-600/50 text-red-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-950/40 hover:border-red-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
                 >
                   <ThumbsDown className="w-5 h-5"/> PASS
                 </button>
                 <button 
                   onClick={() => processSwipe('right')}
-                  className="flex-1 bg-black border border-green-500/50 text-green-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl transition-colors flex items-center justify-center gap-2 active:scale-95"
+                  className="flex-1 bg-black border-2 border-green-500/50 text-green-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-950/40 hover:border-green-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
                 >
                   <Heart className="w-5 h-5"/> SMASH
                 </button>
@@ -724,7 +926,7 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
 SwipeCard.displayName = "SwipeCard";
 
 // ============================================================================
-// FALLBACK SCORE CALCULATOR - Synchronous only
+// FALLBACK SCORE CALCULATOR
 // ============================================================================
 function calculateFallbackScore(target) {
   let score = 10;
