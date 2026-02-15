@@ -6,7 +6,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   Lock, Activity, Terminal, ChevronLeft, Radar, Zap, User, X, 
   Crosshair, Heart, ThumbsDown, EyeOff, Trophy, Flame, ArrowUpRight, Edit2,
-  ArrowLeft, ArrowRight, Sparkles
+  ArrowLeft, ArrowRight
 } from "lucide-react";
 import Link from "next/link";
 
@@ -42,15 +42,14 @@ export default function MinderHub() {
   
   // ANIMATION STATE
   const [showInstructions, setShowInstructions] = useState(true);
-  const [celebrationAnimation, setCelebrationAnimation] = useState(null); // 'smash' or 'pass'
   
   // Hydration flags
   const hydrationStarted = useRef(false);
   const mounted = useRef(true);
 
-  // Hide instructions after 5 seconds or first swipe
+  // Hide instructions after 3 seconds or first swipe
   useEffect(() => {
-    const timer = setTimeout(() => setShowInstructions(false), 5000);
+    const timer = setTimeout(() => setShowInstructions(false), 3000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -221,7 +220,7 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // INTERACTION HANDLER WITH CELEBRATION
+  // INTERACTION HANDLER WITH SUBTLE HAPTIC FEEDBACK
   // --------------------------------------------------------------------------
   const executeSwipe = useCallback((direction, targetId, isOwnCard) => {
     if (!session && !isOwnCard) {
@@ -235,10 +234,13 @@ export default function MinderHub() {
     // Hide instructions on first swipe
     setShowInstructions(false);
 
-    // Trigger celebration animation
-    if (!isOwnCard && direction !== 'dismiss') {
-      setCelebrationAnimation(action);
-      setTimeout(() => setCelebrationAnimation(null), 2000);
+    // Subtle haptic feedback (mobile only)
+    if (!isOwnCard && direction !== 'dismiss' && 'vibrate' in navigator) {
+      if (action === 'SMASH') {
+        navigator.vibrate([10, 5, 10]); // Double tap pattern
+      } else {
+        navigator.vibrate(15); // Single short pulse
+      }
     }
 
     // Update index
@@ -289,184 +291,41 @@ export default function MinderHub() {
       </div>
 
       {/* ====================================================================== */}
-      {/* CELEBRATION OVERLAY */}
-      {/* ====================================================================== */}
-      <AnimatePresence>
-        {celebrationAnimation && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.5 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="fixed inset-0 z-[1500] flex items-center justify-center pointer-events-none"
-          >
-            {celebrationAnimation === 'SMASH' ? (
-              <div className="flex flex-col items-center gap-6">
-                <motion.div
-                  animate={{ 
-                    rotate: [0, -10, 10, -10, 0],
-                    scale: [1, 1.2, 1, 1.2, 1]
-                  }}
-                  transition={{ duration: 0.5, repeat: 2 }}
-                  className="relative"
-                >
-                  <Heart className="w-32 h-32 md:w-48 md:h-48 text-green-500 fill-green-500 drop-shadow-[0_0_50px_rgba(34,197,94,1)]" />
-                  {/* Explosion particles */}
-                  {[...Array(8)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 1, scale: 0 }}
-                      animate={{ 
-                        opacity: 0,
-                        scale: 1,
-                        x: Math.cos((i / 8) * Math.PI * 2) * 150,
-                        y: Math.sin((i / 8) * Math.PI * 2) * 150
-                      }}
-                      transition={{ duration: 1, ease: "easeOut" }}
-                      className="absolute top-1/2 left-1/2 w-4 h-4 bg-green-500 rounded-full"
-                    />
-                  ))}
-                </motion.div>
-                <motion.h1 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-6xl md:text-8xl font-black text-green-500 uppercase tracking-wider drop-shadow-[0_0_50px_rgba(34,197,94,1)]"
-                >
-                  SMASH!
-                </motion.h1>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-xl md:text-2xl text-green-400 font-bold uppercase tracking-widest flex items-center gap-3"
-                >
-                  <Sparkles className="w-6 h-6" />
-                  It's a Match!
-                  <Sparkles className="w-6 h-6" />
-                </motion.div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-6">
-                <motion.div
-                  animate={{ 
-                    rotate: [0, 15, -15, 15, 0],
-                  }}
-                  transition={{ duration: 0.4, repeat: 2 }}
-                >
-                  <ThumbsDown className="w-32 h-32 md:w-48 md:h-48 text-red-500 fill-red-500 drop-shadow-[0_0_50px_rgba(220,38,38,1)]" />
-                  {/* Smoke particles */}
-                  {[...Array(6)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0.8, scale: 0.5, y: 0 }}
-                      animate={{ 
-                        opacity: 0,
-                        scale: 2,
-                        y: -100
-                      }}
-                      transition={{ duration: 1.5, delay: i * 0.1, ease: "easeOut" }}
-                      className="absolute top-0 left-1/2 w-8 h-8 bg-red-900/50 rounded-full blur-xl"
-                    />
-                  ))}
-                </motion.div>
-                <motion.h1 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-6xl md:text-8xl font-black text-red-500 uppercase tracking-wider drop-shadow-[0_0_50px_rgba(220,38,38,1)]"
-                >
-                  PASS!
-                </motion.h1>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-xl md:text-2xl text-red-400 font-bold uppercase tracking-widest"
-                >
-                  Next Target...
-                </motion.div>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ====================================================================== */}
-      {/* SWIPE INSTRUCTIONS OVERLAY */}
+      {/* SUBTLE SWIPE INSTRUCTIONS */}
       {/* ====================================================================== */}
       <AnimatePresence>
         {showInstructions && !loading && profiles.length > 0 && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1400] flex items-center justify-center pointer-events-none"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-32 md:bottom-auto md:top-32 left-1/2 -translate-x-1/2 z-[400] pointer-events-none"
           >
             {/* Mobile Instructions */}
-            <div className="md:hidden flex flex-col items-center gap-8">
-              <motion.div
-                animate={{ x: [-30, 30, -30] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="flex items-center gap-4 bg-black/80 backdrop-blur-xl px-8 py-6 rounded-3xl border-2 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.3)]"
-              >
-                <ArrowLeft className="w-10 h-10 text-red-500" />
-                <div className="text-center">
-                  <div className="text-2xl font-black text-red-500 uppercase">Swipe Left</div>
-                  <div className="text-xs text-red-400 font-bold mt-1">to PASS</div>
-                </div>
-              </motion.div>
-              
-              <motion.div
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-                className="text-sm text-gray-400 font-bold uppercase tracking-widest"
-              >
-                or tap buttons below
-              </motion.div>
-              
-              <motion.div
-                animate={{ x: [30, -30, 30] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="flex items-center gap-4 bg-black/80 backdrop-blur-xl px-8 py-6 rounded-3xl border-2 border-green-500/50 shadow-[0_0_50px_rgba(34,197,94,0.3)]"
-              >
-                <div className="text-center">
-                  <div className="text-2xl font-black text-green-500 uppercase">Swipe Right</div>
-                  <div className="text-xs text-green-400 font-bold mt-1">to SMASH</div>
-                </div>
-                <ArrowRight className="w-10 h-10 text-green-500" />
-              </motion.div>
+            <div className="md:hidden flex items-center gap-4 bg-black/60 backdrop-blur-md px-6 py-3 rounded-full border border-white/20">
+              <div className="flex items-center gap-2 text-red-400">
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-xs font-bold">PASS</span>
+              </div>
+              <div className="w-px h-4 bg-white/20" />
+              <div className="flex items-center gap-2 text-green-400">
+                <span className="text-xs font-bold">SMASH</span>
+                <ArrowRight className="w-4 h-4" />
+              </div>
             </div>
 
             {/* Desktop Instructions */}
-            <div className="hidden md:flex items-center gap-12">
-              <motion.div
-                animate={{ x: [-20, -40, -20] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="flex flex-col items-center gap-4 bg-black/80 backdrop-blur-xl px-10 py-8 rounded-3xl border-2 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.3)]"
-              >
-                <div className="flex items-center gap-4">
-                  <ArrowLeft className="w-12 h-12 text-red-500" />
-                  <div className="text-3xl font-black text-red-500 uppercase">Left Arrow</div>
-                </div>
-                <div className="text-sm text-red-400 font-bold uppercase tracking-widest">or Click PASS</div>
-              </motion.div>
-              
-              <motion.div
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-                className="text-lg text-gray-400 font-bold uppercase tracking-widest"
-              >
-                - OR -
-              </motion.div>
-              
-              <motion.div
-                animate={{ x: [20, 40, 20] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="flex flex-col items-center gap-4 bg-black/80 backdrop-blur-xl px-10 py-8 rounded-3xl border-2 border-green-500/50 shadow-[0_0_50px_rgba(34,197,94,0.3)]"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="text-3xl font-black text-green-500 uppercase">Right Arrow</div>
-                  <ArrowRight className="w-12 h-12 text-green-500" />
-                </div>
-                <div className="text-sm text-green-400 font-bold uppercase tracking-widest">or Click SMASH</div>
-              </motion.div>
+            <div className="hidden md:flex items-center gap-6 bg-black/60 backdrop-blur-md px-8 py-3 rounded-full border border-white/20">
+              <div className="flex items-center gap-2 text-red-400">
+                <div className="text-xs font-mono bg-red-950/50 px-2 py-1 rounded border border-red-500/30">←</div>
+                <span className="text-xs font-bold">PASS</span>
+              </div>
+              <div className="w-px h-4 bg-white/20" />
+              <div className="flex items-center gap-2 text-green-400">
+                <span className="text-xs font-bold">SMASH</span>
+                <div className="text-xs font-mono bg-green-950/50 px-2 py-1 rounded border border-green-500/30">→</div>
+              </div>
             </div>
           </motion.div>
         )}
