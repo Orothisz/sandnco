@@ -148,44 +148,38 @@ function LoginContent() {
         }
       });
 
-      if (error) {
-        console.error('Signup error:', error);
-        
-        // Check if it's a username conflict error from the database trigger
-        const errorMsg = error.message.toLowerCase();
-        if (errorMsg.includes('duplicate') || 
-            errorMsg.includes('unique') || 
-            errorMsg.includes('username') ||
-            errorMsg.includes('profiles_username_key') ||
-            errorMsg.includes('saving new user') ||
-            errorMsg.includes('database error')) {
-          setMessage({ 
-            type: "error", 
-            text: `USERNAME_CONFLICT: [${username.toUpperCase()}]_ALREADY_TAKEN_TRY_DIFFERENT_USERNAME`
-          });
-        } else if (errorMsg.includes('email')) {
-          setMessage({ 
-            type: "error", 
-            text: `EMAIL_CONFLICT: [${email}]_ALREADY_REGISTERED`
-          });
-        } else {
-          setMessage({ 
-            type: "error", 
-            text: `REGISTRATION_ERROR: ${error.message.toUpperCase().replace(/\s+/g, '_')}`
-          });
-        }
-        setLoading(false);
-        return;
-      }
+     if (error) {
+  console.error("Signup error:", error);
 
-      if (data?.user?.identities?.length === 0) {
-        setMessage({ 
-          type: "error", 
-          text: `EMAIL_CONFLICT: ADDRESS_[${email}]_ALREADY_REGISTERED` 
-        });
-        setLoading(false);
-        return;
-      }
+  // Postgres unique violation (username already taken)
+  if (error.code === "23505") {
+    setMessage({
+      type: "error",
+      text: `REGISTRATION_FAILED: USERNAME_[${username.toUpperCase()}]_ALREADY_EXISTS`
+    });
+    setLoading(false);
+    return;
+  }
+
+  // Email already registered case
+  if (error.message.toLowerCase().includes("email")) {
+    setMessage({
+      type: "error",
+      text: `EMAIL_CONFLICT: [${email}]_ALREADY_REGISTERED`
+    });
+    setLoading(false);
+    return;
+  }
+
+  // Fallback
+  setMessage({
+    type: "error",
+    text: `REGISTRATION_ERROR: ${error.message.toUpperCase().replace(/\s+/g, "_")}`
+  });
+
+  setLoading(false);
+  return;
+}
 
       if (data?.user && !data?.session) {
         setMessage({ 
