@@ -378,7 +378,7 @@ export default function MinderHub() {
   // --------------------------------------------------------------------------
   // INTERACTION HANDLER WITH SUBTLE HAPTIC FEEDBACK
   // --------------------------------------------------------------------------
-  const executeSwipe = useCallback((direction, targetId, isOwnCard) => {
+  const executeSwipe = useCallback((direction, targetId, isOwnCard, existingSwipe) => {
     if (!session && !isOwnCard) {
       setAuthModal(true);
       return;
@@ -386,6 +386,7 @@ export default function MinderHub() {
 
     const action = direction === 'right' ? 'SMASH' : 'PASS';
     const targetAlias = profiles[currentIndex]?.alias || 'TARGET';
+    const isChanging = existingSwipe && existingSwipe !== action;
 
     // Hide instructions on first swipe
     setShowInstructions(false);
@@ -405,11 +406,14 @@ export default function MinderHub() {
       }
     }
 
-    // Update index
-    setCurrentIndex(prev => {
-      const next = prev + 1;
-      return next >= profiles.length ? 0 : next;
-    });
+    // Only advance to next card if it's a NEW swipe or keeping the same choice
+    // Don't advance if changing from SMASH to PASS or vice versa
+    if (!isChanging && !existingSwipe) {
+      setCurrentIndex(prev => {
+        const next = prev + 1;
+        return next >= profiles.length ? 0 : next;
+      });
+    }
 
     if (isOwnCard || direction === 'dismiss') return;
 
@@ -417,7 +421,7 @@ export default function MinderHub() {
     setUserSwipes(prev => new Map(prev).set(targetId, action));
     setFeed(prev => [{ 
       id: `local-${Date.now()}`, 
-      text: `> YOU ${action}ED [${targetAlias}]`, 
+      text: isChanging ? `> YOU CHANGED TO ${action} [${targetAlias}]` : `> YOU ${action}ED [${targetAlias}]`, 
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
 
@@ -427,7 +431,8 @@ export default function MinderHub() {
         { 
           swiper_id: session.user.id, 
           target_id: targetId, 
-          action 
+          action,
+          updated_at: new Date().toISOString()
         },
         { onConflict: 'swiper_id,target_id' }
       )
@@ -439,8 +444,28 @@ export default function MinderHub() {
             target_id: targetId, 
             action 
           });
+          // Revert optimistic update on error
+          setUserSwipes(prev => {
+            const newMap = new Map(prev);
+            if (existingSwipe) {
+              newMap.set(targetId, existingSwipe);
+            } else {
+              newMap.delete(targetId);
+            }
+            return newMap;
+          });
         } else {
-          console.log('✅ Swipe saved successfully:', action, 'on', targetAlias);
+          console.log(`✅ Swipe ${isChanging ? 'changed' : 'saved'} successfully:`, action, 'on', targetAlias);
+          
+          // If user is changing their mind, advance to next card after successful save
+          if (isChanging) {
+            setTimeout(() => {
+              setCurrentIndex(prev => {
+                const next = prev + 1;
+                return next >= profiles.length ? 0 : next;
+              });
+            }, 600); // Small delay so user sees the change
+          }
         }
       });
 
@@ -819,7 +844,7 @@ export default function MinderHub() {
                     session={session}
                     isOwnCard={session?.user?.id === card.target.user_id}
                     existingSwipe={userSwipes.get(card.target.id)}
-                    onExecuteSwipe={(dir) => executeSwipe(dir, card.target.id, session?.user?.id === card.target.user_id)}
+                    onExecuteSwipe={(dir) => executeSwipe(dir, card.target.id, session?.user?.id === card.target.user_id, userSwipes.get(card.target.id))}
                     isMobile={isMobile.current}
                   />
                 ))}
