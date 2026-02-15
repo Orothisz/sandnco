@@ -394,7 +394,7 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // INTERACTION HANDLER - FIXED FOR REAL
+  // INTERACTION HANDLER - FIXED: ALWAYS ADVANCE + DETERMINISTIC LEADERBOARD
   // --------------------------------------------------------------------------
   const executeSwipe = useCallback(async (direction, targetId, isOwnCard, existingSwipe) => {
     if (!session && !isOwnCard) {
@@ -410,9 +410,8 @@ export default function MinderHub() {
     const action = direction === 'right' ? 'SMASH' : 'PASS';
     const targetAlias = profiles[currentIndex]?.alias || 'TARGET';
     const isChanging = existingSwipe && existingSwipe !== action;
-    const isKeeping = existingSwipe && existingSwipe === action;
 
-    console.log('🎯 Swipe:', { action, existingSwipe, isChanging, isKeeping });
+    console.log('🎯 Swipe:', { action, existingSwipe, isChanging });
 
     setShowInstructions(false);
 
@@ -425,19 +424,16 @@ export default function MinderHub() {
       navigator.vibrate(action === 'SMASH' ? [10, 5, 10] : 15);
     }
 
-    // Update state FIRST before any async operations
+    // ALWAYS advance card - no conditional
+    setCurrentIndex(prev => prev + 1 >= profiles.length ? 0 : prev + 1);
+
+    // Update state
     setUserSwipes(prev => new Map(prev).set(targetId, action));
     setFeed(prev => [{ 
       id: `local-${Date.now()}`, 
       text: `> YOU ${isChanging ? 'CHANGED TO' : ''} ${action}ED [${targetAlias}]`, 
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
-
-    // Advance card for new swipes or keeping same
-    // Don't advance if changing - let user see the update
-    if (!isChanging) {
-      setCurrentIndex(prev => prev + 1 >= profiles.length ? 0 : prev + 1);
-    }
 
     // Save to database
     try {
@@ -461,12 +457,18 @@ export default function MinderHub() {
         });
       } else {
         console.log('✅ Saved:', action);
+        
+        // DETERMINISTIC LEADERBOARD UPDATE - Don't rely on realtime
+        if (action === 'SMASH' || isChanging) {
+          console.log('📊 Directly refreshing leaderboard...');
+          refreshLeaderboard();
+        }
       }
     } catch (err) {
       console.error('❌ Exception:', err);
     }
 
-  }, [currentIndex, profiles, session, supabase]);
+  }, [currentIndex, profiles, session, supabase, refreshLeaderboard]);
 
   const visibleCards = profiles
     .slice(currentIndex, currentIndex + 3)
