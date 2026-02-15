@@ -33,6 +33,7 @@ export default function MinderHub() {
   // DEFERRED STATE
   const [feed, setFeed] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardUpdating, setLeaderboardUpdating] = useState(false);
   
   // UI STATE
   const [loading, setLoading] = useState(true);
@@ -91,6 +92,66 @@ export default function MinderHub() {
     } catch (err) {
       console.error("Critical load failed:", err);
       setLoading(false);
+    }
+  }, [supabase]);
+
+  // --------------------------------------------------------------------------
+  // REFRESH LEADERBOARD FUNCTION (for real-time updates)
+  // --------------------------------------------------------------------------
+  const refreshLeaderboard = useCallback(async () => {
+    if (!mounted.current) return;
+    
+    setLeaderboardUpdating(true);
+    
+    try {
+      // Use the same logic as initial load
+      const { data: allSmashes } = await supabase
+        .from('minder_swipes')
+        .select('target_id')
+        .eq('action', 'SMASH');
+      
+      if (!allSmashes || allSmashes.length === 0 || !mounted.current) {
+        console.log('No smashes for leaderboard update');
+        setLeaderboardUpdating(false);
+        return;
+      }
+      
+      const counts = {};
+      allSmashes.forEach(s => {
+        if (s.target_id) counts[s.target_id] = (counts[s.target_id] || 0) + 1;
+      });
+      
+      const topIds = Object.entries(counts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3)
+        .map(([id]) => id);
+      
+      if (topIds.length === 0) {
+        setLeaderboardUpdating(false);
+        return;
+      }
+      
+      const { data: targets } = await supabase
+        .from('minder_targets')
+        .select('id, alias, image_url')
+        .in('id', topIds);
+      
+      if (targets && mounted.current) {
+        const leaderboardData = targets
+          .map(t => ({ ...t, score: counts[t.id] }))
+          .sort((a, b) => b.score - a.score);
+        
+        console.log('📊 Leaderboard updated:', leaderboardData);
+        setLeaderboard(leaderboardData);
+        
+        // Keep the updating indicator visible for a moment
+        setTimeout(() => {
+          if (mounted.current) setLeaderboardUpdating(false);
+        }, 800);
+      }
+    } catch (error) {
+      console.error('Error refreshing leaderboard:', error);
+      setLeaderboardUpdating(false);
     }
   }, [supabase]);
 
@@ -250,11 +311,37 @@ export default function MinderHub() {
               .single();
             
             const action = payload.new.action;
+            
+            // Update feed
             setFeed(prev => [{
               id: payload.new.id,
               text: `> AGENT ${action}ED [${t?.alias || 'ANON'}]`,
               color: action === 'SMASH' ? 'text-green-500' : 'text-red-500'
             }, ...prev].slice(0, 15));
+            
+            // Real-time leaderboard update on SMASH
+            if (action === 'SMASH') {
+              console.log('🔥 Real-time SMASH detected, updating leaderboard...');
+              refreshLeaderboard();
+            }
+          })
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'minder_swipes'
+          }, async (payload) => {
+            if (!mounted.current) return;
+            console.log('🔄 Swipe updated, refreshing leaderboard...');
+            refreshLeaderboard();
+          })
+          .on('postgres_changes', {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'minder_swipes'
+          }, async (payload) => {
+            if (!mounted.current) return;
+            console.log('🗑️ Swipe deleted, refreshing leaderboard...');
+            refreshLeaderboard();
           })
           .subscribe();
       }, 2000);
@@ -559,9 +646,22 @@ export default function MinderHub() {
             className="fixed inset-0 z-[1000] bg-black md:hidden p-8 flex flex-col"
           >
             <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-6">
-              <h3 className="text-yellow-500 font-black text-2xl uppercase flex items-center gap-3">
-                <Trophy className="w-6 h-6"/> TRENDING
-              </h3>
+              <div className="flex items-center gap-3">
+                <h3 className="text-yellow-500 font-black text-2xl uppercase flex items-center gap-3">
+                  <Trophy className="w-6 h-6"/> TRENDING
+                </h3>
+                {leaderboardUpdating && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-2 bg-yellow-500/20 px-3 py-1 rounded-full border border-yellow-500/30"
+                  >
+                    <Zap className="w-3 h-3 text-yellow-500 animate-pulse" />
+                    <span className="text-[10px] font-bold text-yellow-500 uppercase">Live</span>
+                  </motion.div>
+                )}
+              </div>
               <button onClick={() => setMobileLeaderboardOpen(false)} className="bg-white/10 p-3 rounded-full">
                 <X className="w-6 h-6" />
               </button>
@@ -618,15 +718,34 @@ export default function MinderHub() {
         </div>
         
         <div className="mt-8 border-t border-white/10 pt-8">
-          <h3 className="text-yellow-500 font-black text-xs mb-5 flex items-center gap-3 uppercase">
-            <Trophy className="w-4 h-4"/> TOP TARGETS
-          </h3>
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-yellow-500 font-black text-xs uppercase flex items-center gap-3">
+              <Trophy className="w-4 h-4"/> TOP TARGETS
+            </h3>
+            {leaderboardUpdating && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-1.5 bg-yellow-500/20 px-2 py-1 rounded-full border border-yellow-500/30"
+              >
+                <Zap className="w-3 h-3 text-yellow-500 animate-pulse" />
+                <span className="text-[8px] font-bold text-yellow-500 uppercase tracking-wider">Live</span>
+              </motion.div>
+            )}
+          </div>
           <div className="space-y-3">
             {leaderboard.length === 0 ? (
               <p className="text-gray-500 text-xs text-center">Loading...</p>
             ) : (
               leaderboard.map((l, i) => (
-                <div key={l.id} className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5">
+                <motion.div 
+                  key={l.id}
+                  layout
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5"
+                >
                   <div className="flex items-center gap-4">
                     <span className="text-gray-600 font-black text-xl">#{i+1}</span>
                     <span className="text-xs font-black text-white uppercase">{l.alias}</span>
@@ -634,7 +753,7 @@ export default function MinderHub() {
                   <span className="text-xs text-green-500 font-black flex items-center gap-1.5">
                     <Flame className="w-4 h-4"/> {l.score}
                   </span>
-                </div>
+                </motion.div>
               ))
             )}
           </div>
