@@ -99,7 +99,7 @@ export default function MinderHub() {
   // REFRESH LEADERBOARD FUNCTION (for real-time updates)
   // --------------------------------------------------------------------------
   const refreshLeaderboard = useCallback(async () => {
-    if (!mounted.current) return;
+    if (!mounted.current || leaderboardUpdating) return; // Guard against overlap
     
     setLeaderboardUpdating(true);
     
@@ -475,9 +475,9 @@ export default function MinderHub() {
     .map((target, idx) => ({
       target,
       relativeIndex: idx, 
-      isTop: idx === 0
-    }))
-    .reverse();
+      isTop: idx === 0,
+      zIndex: 50 - idx // Proper stacking without reverse
+    }));
 
   return (
     <div className="h-[100dvh] bg-[#000000] text-white overflow-hidden flex flex-col md:flex-row font-mono relative touch-none select-none">
@@ -833,13 +833,14 @@ export default function MinderHub() {
             </div>
           ) : (
             <div className="relative w-[95%] md:w-full h-[82dvh] md:h-full max-h-[800px] flex items-center justify-center">
-              <AnimatePresence>
+              <AnimatePresence mode="wait">
                 {visibleCards.map((card) => (
                   <SwipeCard 
-                    key={card.target.id}
+                    key={`${card.target.id}-${currentIndex}`}
                     target={card.target} 
                     isTop={card.isTop} 
                     depthIndex={card.relativeIndex}
+                    zIndex={card.zIndex}
                     session={session}
                     isOwnCard={session?.user?.id === card.target.user_id}
                     existingSwipe={userSwipes.get(card.target.id)}
@@ -859,9 +860,10 @@ export default function MinderHub() {
 // ============================================================================
 // SWIPE CARD WITH ENHANCED VISUAL FEEDBACK
 // ============================================================================
-const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, existingSwipe, onExecuteSwipe, isMobile }) => {
+const SwipeCard = React.memo(({ target, isTop, depthIndex, zIndex, session, isOwnCard, existingSwipe, onExecuteSwipe, isMobile }) => {
   const x = useMotionValue(0);
   const controls = useAnimation();
+  const [exitDirection, setExitDirection] = React.useState(null);
   
   const redFlagScore = target.redflag_score || calculateFallbackScore(target);
   
@@ -890,18 +892,10 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
   const processSwipe = async (direction) => {
     if (isOwnCard && direction !== 'dismiss') return;
 
-    const exitX = direction === 'right' ? window.innerWidth + 200 : direction === 'left' ? -(window.innerWidth + 200) : 0;
-    const exitY = direction === 'dismiss' ? -(window.innerHeight + 200) : 0;
-    const exitRotate = direction === 'right' ? 30 : direction === 'left' ? -30 : 0;
+    // Set exit direction for AnimatePresence
+    setExitDirection(direction);
     
-    await controls.start({ 
-      x: exitX, 
-      y: exitY, 
-      rotate: exitRotate, 
-      opacity: 0, 
-      transition: { duration: 0.3, ease: "easeOut" } 
-    });
-    
+    // Immediately call callback - AnimatePresence will handle exit
     onExecuteSwipe(direction);
   };
 
@@ -911,8 +905,10 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
     const velocity = 350;
     
     if (info.offset.x > threshold || info.velocity.x > velocity) {
+      setExitDirection('right');
       await processSwipe('right');
     } else if (info.offset.x < -threshold || info.velocity.x < -velocity) {
+      setExitDirection('left');
       await processSwipe('left');
     } else {
       controls.start({ x: 0, y: 0, rotate: 0, transition: { type: "spring", stiffness: 400, damping: 30 } });
@@ -923,10 +919,23 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, session, isOwnCard, e
   const safeAlias = String(target?.alias || "UNKNOWN");
   const safeInsta = String(target?.instagram_id || "");
 
+  // Determine exit animation based on direction
+  const getExitAnimation = () => {
+    if (!exitDirection) return {};
+    return {
+      x: exitDirection === 'right' ? 600 : exitDirection === 'left' ? -600 : 0,
+      y: exitDirection === 'dismiss' ? -600 : 0,
+      rotate: exitDirection === 'right' ? 30 : exitDirection === 'left' ? -30 : 0,
+      opacity: 0,
+      transition: { duration: 0.25, ease: "easeOut" }
+    };
+  };
+
   return (
     <motion.div
-      style={{ x, rotate, scale, y: isOwnCard && isTop ? 0 : yOffset, zIndex: 50 - depthIndex }}
+      style={{ x, rotate, scale, y: isOwnCard && isTop ? 0 : yOffset, zIndex }}
       animate={controls}
+      exit={getExitAnimation()}
       drag={isTop && !isOwnCard ? "x" : false}
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.8}
