@@ -119,68 +119,113 @@ export default function MinderHub() {
             }
           }),
         
-        // FIXED LEADERBOARD: Proper aggregation with error handling
+        // LEADERBOARD: Single optimized query with JOIN
         supabase
-          .from('minder_swipes')
-          .select('target_id')
-          .eq('action', 'SMASH')
-          .then(async ({ data: swipes, error }) => {
+          .rpc('get_leaderboard', {})
+          .then(({ data, error }) => {
             if (error) {
-              console.error('Leaderboard swipes error:', error);
-              return;
+              console.error('Leaderboard RPC error:', error);
+              // Fallback to manual query
+              return supabase
+                .from('minder_swipes')
+                .select(`
+                  target_id,
+                  minder_targets!inner (
+                    id,
+                    alias,
+                    image_url
+                  )
+                `)
+                .eq('action', 'SMASH');
             }
-            
-            if (!swipes || swipes.length === 0 || !mounted.current) {
-              console.log('No swipes found for leaderboard');
-              return;
-            }
-            
-            // Count smashes per target
-            const counts = {};
-            swipes.forEach(s => {
-              if (s.target_id) {
-                counts[s.target_id] = (counts[s.target_id] || 0) + 1;
-              }
-            });
-            
-            console.log('Smash counts:', counts);
-            
-            // Get top 3 entries
-            const entries = Object.entries(counts);
-            if (entries.length === 0) {
-              console.log('No entries to display');
-              return;
-            }
-            
-            const topEntries = entries
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 3);
-            
-            const topIds = topEntries.map(([id]) => id);
-            console.log('Top IDs:', topIds);
-            
-            // Fetch full target info
-            const { data: leaders, error: leadersError } = await supabase
-              .from('minder_targets')
-              .select('id, alias, image_url')
-              .in('id', topIds);
-            
-            if (leadersError) {
-              console.error('Leaderboard targets error:', leadersError);
-              return;
-            }
-            
-            if (leaders && mounted.current) {
-              // Map scores and sort by count
-              const leaderboardData = leaders
-                .map(t => ({ 
-                  ...t, 
-                  score: counts[t.id] || 0
-                }))
-                .sort((a, b) => b.score - a.score);
+            return { data, error: null };
+          })
+          .then(async ({ data, error }) => {
+            if (error) {
+              console.error('Leaderboard fallback error:', error);
               
-              console.log('Final leaderboard:', leaderboardData);
-              setLeaderboard(leaderboardData);
+              // Last resort: manual aggregation
+              const { data: allSmashes } = await supabase
+                .from('minder_swipes')
+                .select('target_id')
+                .eq('action', 'SMASH');
+              
+              if (!allSmashes || allSmashes.length === 0 || !mounted.current) {
+                console.log('No smashes found');
+                return;
+              }
+              
+              const counts = {};
+              allSmashes.forEach(s => {
+                if (s.target_id) counts[s.target_id] = (counts[s.target_id] || 0) + 1;
+              });
+              
+              const topIds = Object.entries(counts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 3)
+                .map(([id]) => id);
+              
+              if (topIds.length === 0) return;
+              
+              const { data: targets } = await supabase
+                .from('minder_targets')
+                .select('id, alias, image_url')
+                .in('id', topIds);
+              
+              if (targets && mounted.current) {
+                const leaderboardData = targets
+                  .map(t => ({ ...t, score: counts[t.id] }))
+                  .sort((a, b) => b.score - a.score);
+                
+                console.log('Leaderboard (manual):', leaderboardData);
+                setLeaderboard(leaderboardData);
+              }
+              return;
+            }
+            
+            if (!data || !mounted.current) return;
+            
+            // If RPC worked, data is already aggregated
+            if (Array.isArray(data) && data.length > 0) {
+              console.log('Leaderboard (RPC):', data);
+              setLeaderboard(data.slice(0, 3));
+            } else {
+              // Process JOIN result
+              const counts = {};
+              data.forEach(item => {
+                const targetId = item.target_id;
+                if (targetId) counts[targetId] = (counts[targetId] || 0) + 1;
+              });
+              
+              const topEntries = Object.entries(counts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 3);
+              
+              if (topEntries.length === 0) return;
+              
+              // Get unique target data
+              const seenTargets = new Map();
+              data.forEach(item => {
+                if (item.minder_targets && !seenTargets.has(item.target_id)) {
+                  seenTargets.set(item.target_id, item.minder_targets);
+                }
+              });
+              
+              const leaderboardData = topEntries
+                .map(([targetId, count]) => {
+                  const target = seenTargets.get(targetId);
+                  if (!target) return null;
+                  return {
+                    id: targetId,
+                    alias: target.alias,
+                    image_url: target.image_url,
+                    score: count
+                  };
+                })
+                .filter(Boolean);
+              
+              console.log('Leaderboard (JOIN):', leaderboardData);
+              if (mounted.current) setLeaderboard(leaderboardData);
             }
           })
       ]);
