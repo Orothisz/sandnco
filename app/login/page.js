@@ -152,17 +152,23 @@ function LoginContent() {
   console.error("Signup error:", error);
 
   // Postgres unique violation (username already taken)
-  if (error.code === "23505") {
+if (error) {
+  console.error("Signup error:", error);
+
+  const errorMsg = error.message?.toLowerCase() || "";
+
+  // 👇 Catch the generic Supabase masked DB error
+  if (errorMsg.includes("database error saving new user")) {
     setMessage({
       type: "error",
-      text: `REGISTRATION_FAILED: USERNAME_[${username.toUpperCase()}]_ALREADY_EXISTS`
+      text: `REGISTRATION_FAILED: USERNAME_[${username.toUpperCase()}]_MAY_ALREADY_EXIST_TRY_DIFFERENT_ALIAS`
     });
     setLoading(false);
     return;
   }
 
-  // Email already registered case
-  if (error.message.toLowerCase().includes("email")) {
+  // Email already exists
+  if (errorMsg.includes("email")) {
     setMessage({
       type: "error",
       text: `EMAIL_CONFLICT: [${email}]_ALREADY_REGISTERED`
@@ -170,6 +176,17 @@ function LoginContent() {
     setLoading(false);
     return;
   }
+
+  // Fallback
+  setMessage({
+    type: "error",
+    text: `REGISTRATION_ERROR: ${error.message.toUpperCase().replace(/\s+/g, "_")}`
+  });
+
+  setLoading(false);
+  return;
+}
+
 
   // Fallback
   setMessage({
