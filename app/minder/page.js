@@ -253,7 +253,7 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // HANDLE SWIPE - NEW SIMPLE LOGIC
+  // HANDLE SWIPE - FIXED DATABASE INTEGRATION
   // --------------------------------------------------------------------------
   const handleSwipe = useCallback(async (targetId, direction, isOwnCard, existingSwipe) => {
     if (!session && !isOwnCard) {
@@ -269,6 +269,9 @@ export default function MinderHub() {
     const action = direction === 'right' ? 'SMASH' : 'PASS';
     const target = profiles.find(p => p.id === targetId);
     const targetAlias = target?.alias || 'TARGET';
+    const isChanging = existingSwipe && existingSwipe !== action;
+
+    console.log('🎯 Swipe:', { action, existingSwipe, isChanging });
 
     setShowInstructions(false);
 
@@ -288,11 +291,11 @@ export default function MinderHub() {
     setUserSwipes(prev => new Map(prev).set(targetId, action));
     setFeed(prev => [{ 
       id: `local-${Date.now()}`, 
-      text: `> YOU ${action}ED [${targetAlias}]`, 
+      text: `> YOU ${isChanging ? 'CHANGED TO' : ''} ${action}ED [${targetAlias}]`, 
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
 
-    // Save to database
+    // Save to database - CRITICAL FIX
     try {
       const { error } = await supabase.from('minder_swipes').upsert(
         { 
@@ -305,11 +308,22 @@ export default function MinderHub() {
 
       if (error) {
         console.error('❌ Save failed:', error);
+        // Revert on error
+        setUserSwipes(prev => {
+          const newMap = new Map(prev);
+          if (existingSwipe) {
+            newMap.set(targetId, existingSwipe);
+          } else {
+            newMap.delete(targetId);
+          }
+          return newMap;
+        });
       } else {
-        console.log('✅ Saved:', action, 'on', targetAlias);
+        console.log(`✅ ${isChanging ? 'CHANGED' : 'Saved'}:`, action, 'on', targetAlias);
         
-        // Refresh leaderboard deterministically
-        if (action === 'SMASH') {
+        // Refresh leaderboard on SMASH or when changing
+        if (action === 'SMASH' || isChanging) {
+          console.log('📊 Refreshing leaderboard...');
           refreshLeaderboard();
         }
       }
@@ -323,6 +337,38 @@ export default function MinderHub() {
   const visibleProfiles = profiles.filter(p => !removedCards.has(p.id));
   const currentCard = visibleProfiles[0];
   const hasCards = visibleProfiles.length > 0;
+
+  // --------------------------------------------------------------------------
+  // AUTO-RELOAD WHEN RUNNING LOW
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    // When we have 2 or fewer cards left, load more
+    if (visibleProfiles.length <= 2 && profiles.length > 0 && !loading && session) {
+      console.log('🔄 Running low on cards, loading more...');
+      
+      supabase
+        .from('minder_targets')
+        .select('id, alias, age, bio, image_url, instagram_id, user_id, redflag_score')
+        .order('created_at', { ascending: false })
+        .limit(10)
+        .then(({ data: newProfiles, error }) => {
+          if (error) {
+            console.error('Failed to load more:', error);
+            return;
+          }
+          
+          if (newProfiles && newProfiles.length > 0) {
+            // Add new profiles that aren't already in the list
+            setProfiles(prev => {
+              const existingIds = new Set(prev.map(p => p.id));
+              const uniqueNew = newProfiles.filter(p => !existingIds.has(p.id));
+              console.log(`✅ Loaded ${uniqueNew.length} new cards`);
+              return [...prev, ...uniqueNew];
+            });
+          }
+        });
+    }
+  }, [visibleProfiles.length, profiles.length, loading, session, supabase]);
 
   return (
     <div className="h-[100dvh] bg-[#000000] text-white overflow-hidden flex flex-col md:flex-row font-mono relative touch-none select-none">
