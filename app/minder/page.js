@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { motion, useAnimation, useMotionValue, useTransform, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { 
   Lock, Activity, Terminal, ChevronLeft, Radar, Zap, User, X, 
@@ -11,10 +11,9 @@ import {
 import Link from "next/link";
 
 // ============================================================================
-// MOBILE-FIRST INSTANT RENDER ENGINE (v17.0 - EXCITING ANIMATIONS)
+// COMPLETELY REWRITTEN GRID SYSTEM - BULLETPROOF
 // ============================================================================
 
-// Device detection
 const isMobileDevice = () => {
   if (typeof window === 'undefined') return false;
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -27,7 +26,7 @@ export default function MinderHub() {
   // CORE STATE
   const [session, setSession] = useState(null);
   const [profiles, setProfiles] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [removedCards, setRemovedCards] = useState(new Set());
   const [userSwipes, setUserSwipes] = useState(new Map());
   
   // DEFERRED STATE
@@ -40,38 +39,31 @@ export default function MinderHub() {
   const [authModal, setAuthModal] = useState(false);
   const [mobileHudOpen, setMobileHudOpen] = useState(false);
   const [mobileLeaderboardOpen, setMobileLeaderboardOpen] = useState(false);
-  
-  // ANIMATION STATE
   const [showInstructions, setShowInstructions] = useState(true);
-  const [swipeFeedback, setSwipeFeedback] = useState(null); // { action: 'SMASH' | 'PASS', id: string }
+  const [swipeFeedback, setSwipeFeedback] = useState(null);
   
-  // Hydration flags
-  const hydrationStarted = useRef(false);
   const mounted = useRef(true);
+  const hydrationStarted = useRef(false);
 
-  // Hide instructions after 3 seconds or first swipe
   useEffect(() => {
     const timer = setTimeout(() => setShowInstructions(false), 3000);
     return () => clearTimeout(timer);
   }, []);
 
   // --------------------------------------------------------------------------
-  // CRITICAL PATH: Load ONLY what's needed for first paint
+  // LOAD DATA
   // --------------------------------------------------------------------------
   const loadCriticalData = useCallback(async (activeSession) => {
     try {
-      const limit = 5; // Reduced for instant mobile load
-      
       const { data: rawProfiles, error } = await supabase
         .from('minder_targets')
         .select('id, alias, age, bio, image_url, instagram_id, user_id, redflag_score')
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .limit(10);
       
       if (error) throw error;
       if (!rawProfiles || !mounted.current) return;
 
-      // Fetch swipes in parallel (non-blocking)
       let swipeMap = new Map();
       if (activeSession?.user?.id) {
         supabase
@@ -90,28 +82,26 @@ export default function MinderHub() {
       setLoading(false);
       
     } catch (err) {
-      console.error("Critical load failed:", err);
+      console.error("Load failed:", err);
       setLoading(false);
     }
   }, [supabase]);
 
   // --------------------------------------------------------------------------
-  // REFRESH LEADERBOARD FUNCTION (for real-time updates)
+  // REFRESH LEADERBOARD
   // --------------------------------------------------------------------------
   const refreshLeaderboard = useCallback(async () => {
-    if (!mounted.current || leaderboardUpdating) return; // Guard against overlap
+    if (!mounted.current || leaderboardUpdating) return;
     
     setLeaderboardUpdating(true);
     
     try {
-      // Use the same logic as initial load
       const { data: allSmashes } = await supabase
         .from('minder_swipes')
         .select('target_id')
         .eq('action', 'SMASH');
       
       if (!allSmashes || allSmashes.length === 0 || !mounted.current) {
-        console.log('No smashes for leaderboard update');
         setLeaderboardUpdating(false);
         return;
       }
@@ -141,22 +131,19 @@ export default function MinderHub() {
           .map(t => ({ ...t, score: counts[t.id] }))
           .sort((a, b) => b.score - a.score);
         
-        console.log('📊 Leaderboard updated:', leaderboardData);
         setLeaderboard(leaderboardData);
-        
-        // Keep the updating indicator visible for a moment
         setTimeout(() => {
           if (mounted.current) setLeaderboardUpdating(false);
         }, 800);
       }
     } catch (error) {
-      console.error('Error refreshing leaderboard:', error);
+      console.error('Leaderboard error:', error);
       setLeaderboardUpdating(false);
     }
-  }, [supabase]);
+  }, [supabase, leaderboardUpdating]);
 
   // --------------------------------------------------------------------------
-  // DEFERRED HYDRATION: Everything else loads after paint
+  // HYDRATE SECONDARY DATA
   // --------------------------------------------------------------------------
   const hydrateSecondaryData = useCallback(async () => {
     if (hydrationStarted.current || !mounted.current) return;
@@ -164,7 +151,6 @@ export default function MinderHub() {
 
     const runHydration = () => {
       Promise.all([
-        // Feed
         supabase
           .from('minder_targets')
           .select('id, alias')
@@ -180,118 +166,9 @@ export default function MinderHub() {
             }
           }),
         
-        // LEADERBOARD: Single optimized query with JOIN
-        supabase
-          .rpc('get_leaderboard', {})
-          .then(({ data, error }) => {
-            if (error) {
-              console.error('Leaderboard RPC error:', error);
-              // Fallback to manual query
-              return supabase
-                .from('minder_swipes')
-                .select(`
-                  target_id,
-                  minder_targets!inner (
-                    id,
-                    alias,
-                    image_url
-                  )
-                `)
-                .eq('action', 'SMASH');
-            }
-            return { data, error: null };
-          })
-          .then(async ({ data, error }) => {
-            if (error) {
-              console.error('Leaderboard fallback error:', error);
-              
-              // Last resort: manual aggregation
-              const { data: allSmashes } = await supabase
-                .from('minder_swipes')
-                .select('target_id')
-                .eq('action', 'SMASH');
-              
-              if (!allSmashes || allSmashes.length === 0 || !mounted.current) {
-                console.log('No smashes found');
-                return;
-              }
-              
-              const counts = {};
-              allSmashes.forEach(s => {
-                if (s.target_id) counts[s.target_id] = (counts[s.target_id] || 0) + 1;
-              });
-              
-              const topIds = Object.entries(counts)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 3)
-                .map(([id]) => id);
-              
-              if (topIds.length === 0) return;
-              
-              const { data: targets } = await supabase
-                .from('minder_targets')
-                .select('id, alias, image_url')
-                .in('id', topIds);
-              
-              if (targets && mounted.current) {
-                const leaderboardData = targets
-                  .map(t => ({ ...t, score: counts[t.id] }))
-                  .sort((a, b) => b.score - a.score);
-                
-                console.log('Leaderboard (manual):', leaderboardData);
-                setLeaderboard(leaderboardData);
-              }
-              return;
-            }
-            
-            if (!data || !mounted.current) return;
-            
-            // If RPC worked, data is already aggregated
-            if (Array.isArray(data) && data.length > 0) {
-              console.log('Leaderboard (RPC):', data);
-              setLeaderboard(data.slice(0, 3));
-            } else {
-              // Process JOIN result
-              const counts = {};
-              data.forEach(item => {
-                const targetId = item.target_id;
-                if (targetId) counts[targetId] = (counts[targetId] || 0) + 1;
-              });
-              
-              const topEntries = Object.entries(counts)
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 3);
-              
-              if (topEntries.length === 0) return;
-              
-              // Get unique target data
-              const seenTargets = new Map();
-              data.forEach(item => {
-                if (item.minder_targets && !seenTargets.has(item.target_id)) {
-                  seenTargets.set(item.target_id, item.minder_targets);
-                }
-              });
-              
-              const leaderboardData = topEntries
-                .map(([targetId, count]) => {
-                  const target = seenTargets.get(targetId);
-                  if (!target) return null;
-                  return {
-                    id: targetId,
-                    alias: target.alias,
-                    image_url: target.image_url,
-                    score: count
-                  };
-                })
-                .filter(Boolean);
-              
-              console.log('Leaderboard (JOIN):', leaderboardData);
-              if (mounted.current) setLeaderboard(leaderboardData);
-            }
-          })
+        refreshLeaderboard()
       ]);
 
-      // Real-time subscription
       setTimeout(() => {
         if (!mounted.current) return;
         
@@ -312,16 +189,13 @@ export default function MinderHub() {
             
             const action = payload.new.action;
             
-            // Update feed
             setFeed(prev => [{
               id: payload.new.id,
               text: `> AGENT ${action}ED [${t?.alias || 'ANON'}]`,
               color: action === 'SMASH' ? 'text-green-500' : 'text-red-500'
             }, ...prev].slice(0, 15));
             
-            // Real-time leaderboard update on SMASH
             if (action === 'SMASH') {
-              console.log('🔥 Real-time SMASH detected, updating leaderboard...');
               refreshLeaderboard();
             }
           })
@@ -332,33 +206,18 @@ export default function MinderHub() {
           }, async (payload) => {
             if (!mounted.current) return;
             
-            console.log('🔄 Swipe UPDATE detected:', payload.new);
-            
-            // Get target info for feed
             const { data: t } = await supabase
               .from('minder_targets')
               .select('alias')
               .eq('id', payload.new.target_id)
               .single();
             
-            // Update feed to show the change
             setFeed(prev => [{
               id: `update-${payload.new.id}-${Date.now()}`,
               text: `> AGENT CHANGED TO ${payload.new.action} [${t?.alias || 'ANON'}]`,
               color: payload.new.action === 'SMASH' ? 'text-green-500' : 'text-red-500'
             }, ...prev].slice(0, 15));
             
-            // Refresh leaderboard
-            console.log('🔄 Refreshing leaderboard after update...');
-            refreshLeaderboard();
-          })
-          .on('postgres_changes', {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'minder_swipes'
-          }, async (payload) => {
-            if (!mounted.current) return;
-            console.log('🗑️ Swipe deleted, refreshing leaderboard...');
             refreshLeaderboard();
           })
           .subscribe();
@@ -370,10 +229,10 @@ export default function MinderHub() {
     } else {
       setTimeout(runHydration, 100);
     }
-  }, [supabase]);
+  }, [supabase, refreshLeaderboard]);
 
   // --------------------------------------------------------------------------
-  // BOOT SEQUENCE
+  // BOOT
   // --------------------------------------------------------------------------
   useEffect(() => {
     mounted.current = true;
@@ -394,24 +253,22 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // INTERACTION HANDLER - FIXED: ALWAYS ADVANCE + DETERMINISTIC LEADERBOARD
+  // HANDLE SWIPE - NEW SIMPLE LOGIC
   // --------------------------------------------------------------------------
-  const executeSwipe = useCallback(async (direction, targetId, isOwnCard, existingSwipe) => {
+  const handleSwipe = useCallback(async (targetId, direction, isOwnCard, existingSwipe) => {
     if (!session && !isOwnCard) {
       setAuthModal(true);
       return;
     }
 
     if (isOwnCard || direction === 'dismiss') {
-      setCurrentIndex(prev => prev + 1 >= profiles.length ? 0 : prev + 1);
+      setRemovedCards(prev => new Set(prev).add(targetId));
       return;
     }
 
     const action = direction === 'right' ? 'SMASH' : 'PASS';
-    const targetAlias = profiles[currentIndex]?.alias || 'TARGET';
-    const isChanging = existingSwipe && existingSwipe !== action;
-
-    console.log('🎯 Swipe:', { action, existingSwipe, isChanging });
+    const target = profiles.find(p => p.id === targetId);
+    const targetAlias = target?.alias || 'TARGET';
 
     setShowInstructions(false);
 
@@ -424,14 +281,14 @@ export default function MinderHub() {
       navigator.vibrate(action === 'SMASH' ? [10, 5, 10] : 15);
     }
 
-    // ALWAYS advance card - no conditional
-    setCurrentIndex(prev => prev + 1 >= profiles.length ? 0 : prev + 1);
+    // Remove card from view immediately
+    setRemovedCards(prev => new Set(prev).add(targetId));
 
     // Update state
     setUserSwipes(prev => new Map(prev).set(targetId, action));
     setFeed(prev => [{ 
       id: `local-${Date.now()}`, 
-      text: `> YOU ${isChanging ? 'CHANGED TO' : ''} ${action}ED [${targetAlias}]`, 
+      text: `> YOU ${action}ED [${targetAlias}]`, 
       color: action === 'SMASH' ? 'text-green-500' : 'text-red-500' 
     }, ...prev].slice(0, 15));
 
@@ -448,19 +305,11 @@ export default function MinderHub() {
 
       if (error) {
         console.error('❌ Save failed:', error);
-        // Revert on error
-        setUserSwipes(prev => {
-          const newMap = new Map(prev);
-          if (existingSwipe) newMap.set(targetId, existingSwipe);
-          else newMap.delete(targetId);
-          return newMap;
-        });
       } else {
-        console.log('✅ Saved:', action);
+        console.log('✅ Saved:', action, 'on', targetAlias);
         
-        // DETERMINISTIC LEADERBOARD UPDATE - Don't rely on realtime
-        if (action === 'SMASH' || isChanging) {
-          console.log('📊 Directly refreshing leaderboard...');
+        // Refresh leaderboard deterministically
+        if (action === 'SMASH') {
           refreshLeaderboard();
         }
       }
@@ -468,16 +317,12 @@ export default function MinderHub() {
       console.error('❌ Exception:', err);
     }
 
-  }, [currentIndex, profiles, session, supabase, refreshLeaderboard]);
+  }, [session, profiles, supabase, refreshLeaderboard]);
 
-  const visibleCards = profiles
-    .slice(currentIndex, currentIndex + 3)
-    .map((target, idx) => ({
-      target,
-      relativeIndex: idx, 
-      isTop: idx === 0,
-      zIndex: 50 - idx // Proper stacking without reverse
-    }));
+  // Get visible cards (not removed)
+  const visibleProfiles = profiles.filter(p => !removedCards.has(p.id));
+  const currentCard = visibleProfiles[0];
+  const hasCards = visibleProfiles.length > 0;
 
   return (
     <div className="h-[100dvh] bg-[#000000] text-white overflow-hidden flex flex-col md:flex-row font-mono relative touch-none select-none">
@@ -493,11 +338,9 @@ export default function MinderHub() {
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black" />
       </div>
 
-      {/* ====================================================================== */}
       {/* SUBTLE SWIPE INSTRUCTIONS */}
-      {/* ====================================================================== */}
       <AnimatePresence>
-        {showInstructions && !loading && profiles.length > 0 && (
+        {showInstructions && !loading && hasCards && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -505,7 +348,6 @@ export default function MinderHub() {
             transition={{ duration: 0.3 }}
             className="fixed bottom-32 md:bottom-auto md:top-32 left-1/2 -translate-x-1/2 z-[400] pointer-events-none"
           >
-            {/* Mobile Instructions */}
             <div className="md:hidden flex items-center gap-4 bg-black/60 backdrop-blur-md px-6 py-3 rounded-full border border-white/20">
               <div className="flex items-center gap-2 text-red-400">
                 <ArrowLeft className="w-4 h-4" />
@@ -518,7 +360,6 @@ export default function MinderHub() {
               </div>
             </div>
 
-            {/* Desktop Instructions */}
             <div className="hidden md:flex items-center gap-6 bg-black/60 backdrop-blur-md px-8 py-3 rounded-full border border-white/20">
               <div className="flex items-center gap-2 text-red-400">
                 <div className="text-xs font-mono bg-red-950/50 px-2 py-1 rounded border border-red-500/30">←</div>
@@ -534,9 +375,7 @@ export default function MinderHub() {
         )}
       </AnimatePresence>
 
-      {/* ====================================================================== */}
       {/* SUBTLE SWIPE FEEDBACK */}
-      {/* ====================================================================== */}
       <AnimatePresence>
         {swipeFeedback && (
           <motion.div
@@ -805,7 +644,7 @@ export default function MinderHub() {
               MINDER<span className="text-pink-600">_</span>
             </h1>
             <p className="text-[10px] font-black text-pink-500 uppercase bg-pink-900/20 px-4 py-1.5 rounded-full border border-pink-500/20 mt-3">
-              INSTANT PROTOCOL
+              BULLETPROOF PROTOCOL
             </p>
           </div>
 
@@ -825,29 +664,26 @@ export default function MinderHub() {
               <Radar className="w-16 h-16 animate-spin opacity-50" />
               <div className="text-xs uppercase font-black">LOADING...</div>
             </div>
-          ) : profiles.length === 0 ? (
+          ) : !hasCards ? (
             <div className="text-center w-[90%] md:w-full bg-[#050505] p-12 border border-white/10 rounded-3xl">
               <Crosshair className="w-16 h-16 mx-auto mb-6 text-gray-700" />
               <p className="text-2xl uppercase font-black text-white">GRID CLEARED</p>
               <p className="text-xs text-gray-500 mt-4">No active signals</p>
             </div>
           ) : (
-            <div className="relative w-[95%] md:w-full h-[82dvh] md:h-full max-h-[800px] flex items-center justify-center">
-              <AnimatePresence mode="wait">
-                {visibleCards.map((card) => (
-                  <SwipeCard 
-                    key={`${card.target.id}-${currentIndex}`}
-                    target={card.target} 
-                    isTop={card.isTop} 
-                    depthIndex={card.relativeIndex}
-                    zIndex={card.zIndex}
+            <div className="relative w-[95%] md:w-full h-[82dvh] md:h-full max-h-[800px]">
+              <AnimatePresence mode="popLayout">
+                {currentCard && (
+                  <SimpleSwipeCard
+                    key={currentCard.id}
+                    target={currentCard}
                     session={session}
-                    isOwnCard={session?.user?.id === card.target.user_id}
-                    existingSwipe={userSwipes.get(card.target.id)}
-                    onExecuteSwipe={(dir) => executeSwipe(dir, card.target.id, session?.user?.id === card.target.user_id, userSwipes.get(card.target.id))}
+                    isOwnCard={session?.user?.id === currentCard.user_id}
+                    existingSwipe={userSwipes.get(currentCard.id)}
+                    onSwipe={(dir) => handleSwipe(currentCard.id, dir, session?.user?.id === currentCard.user_id, userSwipes.get(currentCard.id))}
                     isMobile={isMobile.current}
                   />
-                ))}
+                )}
               </AnimatePresence>
             </div>
           )}
@@ -858,114 +694,85 @@ export default function MinderHub() {
 }
 
 // ============================================================================
-// SWIPE CARD WITH ENHANCED VISUAL FEEDBACK
+// SIMPLE SWIPE CARD - NO COMPLEX STACKING
 // ============================================================================
-const SwipeCard = React.memo(({ target, isTop, depthIndex, zIndex, session, isOwnCard, existingSwipe, onExecuteSwipe, isMobile }) => {
-  const x = useMotionValue(0);
-  const controls = useAnimation();
-  const [exitDirection, setExitDirection] = React.useState(null);
-  
+const SimpleSwipeCard = ({ target, session, isOwnCard, existingSwipe, onSwipe, isMobile }) => {
+  const [exitX, setExitX] = useState(0);
+
   const redFlagScore = target.redflag_score || calculateFallbackScore(target);
-  
-  const rotate = useTransform(x, [-200, 200], [-15, 15]);
-  const scale = isTop ? 1 : 1 - (depthIndex * 0.04);
-  const yOffset = isTop ? 0 : depthIndex * 16;
-  
-  // Dynamic opacity based on swipe direction
-  const smashOpacity = useTransform(x, [0, 100], [0, 1]);
-  const passOpacity = useTransform(x, [0, -100], [0, 1]);
-  
-  // Text opacity - only show when actually swiping
-  const smashTextOpacity = useTransform(x, [30, 100], [0, 1]);
-  const passTextOpacity = useTransform(x, [-30, -100], [0, 1]);
 
-  useEffect(() => {
-    if (!isTop || isOwnCard) return;
-    const handleKeyDown = async (e) => {
-      if (e.key === 'ArrowRight') await processSwipe('right');
-      else if (e.key === 'ArrowLeft') await processSwipe('left');
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTop, isOwnCard]);
-
-  const processSwipe = async (direction) => {
-    if (isOwnCard && direction !== 'dismiss') return;
-
-    // Set exit direction for AnimatePresence
-    setExitDirection(direction);
-    
-    // Immediately call callback - AnimatePresence will handle exit
-    onExecuteSwipe(direction);
-  };
-
-  const handleDragEnd = async (event, info) => {
+  const handleDragEnd = (event, info) => {
     if (isOwnCard) return;
-    const threshold = 80;
-    const velocity = 350;
     
-    if (info.offset.x > threshold || info.velocity.x > velocity) {
-      setExitDirection('right');
-      await processSwipe('right');
-    } else if (info.offset.x < -threshold || info.velocity.x < -velocity) {
-      setExitDirection('left');
-      await processSwipe('left');
-    } else {
-      controls.start({ x: 0, y: 0, rotate: 0, transition: { type: "spring", stiffness: 400, damping: 30 } });
+    const threshold = 100;
+    if (info.offset.x > threshold) {
+      setExitX(800);
+      setTimeout(() => onSwipe('right'), 50);
+    } else if (info.offset.x < -threshold) {
+      setExitX(-800);
+      setTimeout(() => onSwipe('left'), 50);
     }
   };
+
+  const handleButton = (direction) => {
+    if (isOwnCard && direction !== 'dismiss') return;
+    
+    setExitX(direction === 'right' ? 800 : direction === 'left' ? -800 : 0);
+    setTimeout(() => onSwipe(direction), 50);
+  };
+
+  // Keyboard
+  useEffect(() => {
+    if (isOwnCard) return;
+    
+    const handleKey = (e) => {
+      if (e.key === 'ArrowRight') handleButton('right');
+      else if (e.key === 'ArrowLeft') handleButton('left');
+    };
+    
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOwnCard]);
 
   const safeBio = String(target?.bio || "");
   const safeAlias = String(target?.alias || "UNKNOWN");
   const safeInsta = String(target?.instagram_id || "");
 
-  // Determine exit animation based on direction
-  const getExitAnimation = () => {
-    if (!exitDirection) return {};
-    return {
-      x: exitDirection === 'right' ? 600 : exitDirection === 'left' ? -600 : 0,
-      y: exitDirection === 'dismiss' ? -600 : 0,
-      rotate: exitDirection === 'right' ? 30 : exitDirection === 'left' ? -30 : 0,
-      opacity: 0,
-      transition: { duration: 0.25, ease: "easeOut" }
-    };
-  };
-
   return (
     <motion.div
-      style={{ x, rotate, scale, y: isOwnCard && isTop ? 0 : yOffset, zIndex }}
-      animate={controls}
-      exit={getExitAnimation()}
-      drag={isTop && !isOwnCard ? "x" : false}
+      drag={!isOwnCard ? "x" : false}
       dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.8}
+      dragElastic={0.7}
       onDragEnd={handleDragEnd}
-      whileTap={isTop && !isOwnCard ? { scale: 0.98 } : {}}
-      className={`absolute inset-0 md:inset-auto md:w-full md:h-full rounded-[2.5rem] md:rounded-[3rem] bg-[#050505] overflow-hidden flex flex-col ${!isTop && 'opacity-80'} ${isOwnCard && isTop ? 'border border-yellow-500' : 'border border-white/10'}`}
-      style={{ willChange: isTop ? 'transform' : 'auto' }}
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1, x: 0 }}
+      exit={{ 
+        x: exitX,
+        opacity: 0,
+        scale: 0.8,
+        rotate: exitX > 0 ? 20 : exitX < 0 ? -20 : 0,
+        transition: { duration: 0.3 }
+      }}
+      className={`absolute inset-0 rounded-[2.5rem] md:rounded-[3rem] bg-[#050505] overflow-hidden flex flex-col ${isOwnCard ? 'border border-yellow-500' : 'border border-white/10'} shadow-2xl`}
     >
-      {!isMobile && (
-        <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] pointer-events-none z-10 rounded-[2.5rem] md:rounded-[3rem]" />
-      )}
-      
       <img 
         src={target?.image_url || ''} 
         alt={safeAlias} 
         draggable={false}
-        loading={isTop ? "eager" : "lazy"}
+        loading="eager"
         className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none" 
       />
       
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent h-32 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent h-32" />
 
-      {isOwnCard && isTop && (
+      {isOwnCard && (
         <div className="absolute top-8 left-0 w-full bg-yellow-500 text-black py-2 font-black text-center text-[10px] uppercase z-30">
           <User className="w-4 h-4 inline mr-2" /> THIS IS YOU
         </div>
       )}
 
-      {existingSwipe && isTop && !isOwnCard && (
+      {existingSwipe && !isOwnCard && (
         <motion.div 
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -974,52 +781,6 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, zIndex, session, isOw
           {existingSwipe === 'SMASH' ? <Heart className="w-4 h-4 fill-current" /> : <ThumbsDown className="w-4 h-4 fill-current" />}
           PREVIOUSLY {existingSwipe}ED
         </motion.div>
-      )}
-
-      {isTop && !isOwnCard && (
-        <>
-          {/* Right swipe indicator - SMASH */}
-          <motion.div 
-            style={{ opacity: smashOpacity }} 
-            className="absolute inset-0 bg-gradient-to-r from-transparent via-green-500/20 to-green-500/40 pointer-events-none z-20"
-          />
-          <motion.div
-            style={{ opacity: smashTextOpacity }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
-          >
-            <div className="flex flex-col items-center gap-4">
-              <Heart className="w-20 h-20 md:w-24 md:h-24 text-green-500 fill-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.8)]" />
-              <div className="text-4xl md:text-5xl font-black text-green-500 uppercase tracking-wider drop-shadow-[0_0_20px_rgba(34,197,94,0.8)]">
-                SMASH
-              </div>
-              <div className="flex items-center gap-2 text-green-400 text-sm font-bold">
-                <ArrowRight className="w-5 h-5" />
-                <span>Swipe Right</span>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Left swipe indicator - PASS */}
-          <motion.div 
-            style={{ opacity: passOpacity }} 
-            className="absolute inset-0 bg-gradient-to-l from-transparent via-red-500/20 to-red-500/40 pointer-events-none z-20"
-          />
-          <motion.div
-            style={{ opacity: passTextOpacity }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
-          >
-            <div className="flex flex-col items-center gap-4">
-              <ThumbsDown className="w-20 h-20 md:w-24 md:h-24 text-red-500 fill-red-500 drop-shadow-[0_0_20px_rgba(220,38,38,0.8)]" />
-              <div className="text-4xl md:text-5xl font-black text-red-500 uppercase tracking-wider drop-shadow-[0_0_20px_rgba(220,38,38,0.8)]">
-                PASS
-              </div>
-              <div className="flex items-center gap-2 text-red-400 text-sm font-bold">
-                <span>Swipe Left</span>
-                <ArrowLeft className="w-5 h-5" />
-              </div>
-            </div>
-          </motion.div>
-        </>
       )}
 
       <div className="mt-auto w-full p-6 md:p-8 flex flex-col gap-5 z-20 pb-10 md:pb-8 bg-gradient-to-t from-black via-black/95 to-transparent">
@@ -1060,76 +821,70 @@ const SwipeCard = React.memo(({ target, isTop, depthIndex, zIndex, session, isOw
           </p>
         </div>
 
-        {isTop && (
-          <div className="mt-2 flex gap-3" onPointerDown={(e) => e.stopPropagation()}>
-            {isOwnCard ? (
-              <button 
-                onClick={() => processSwipe('dismiss')}
-                className="w-full bg-yellow-500 text-black py-4 md:py-5 rounded-2xl text-xs font-black uppercase flex items-center justify-center gap-3 active:scale-95 transition-transform"
-              >
-                <X className="w-5 h-5" /> DISMISS
-              </button>
-            ) : existingSwipe ? (
-              // User has already swiped - show keep or change buttons
-              existingSwipe === 'SMASH' ? (
-                <>
-                  <button 
-                    onClick={() => processSwipe('right')}
-                    className="flex-1 bg-green-900 border-2 border-green-500 text-green-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-800 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
-                  >
-                    <Heart className="w-5 h-5 fill-current"/> KEEP SMASH
-                  </button>
-                  <button 
-                    onClick={() => processSwipe('left')}
-                    className="flex-1 bg-black border-2 border-red-600/50 text-red-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-950/40 hover:border-red-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
-                  >
-                    <ThumbsDown className="w-5 h-5"/> CHANGE TO PASS
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button 
-                    onClick={() => processSwipe('left')}
-                    className="flex-1 bg-red-900 border-2 border-red-500 text-red-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
-                  >
-                    <ThumbsDown className="w-5 h-5 fill-current"/> KEEP PASS
-                  </button>
-                  <button 
-                    onClick={() => processSwipe('right')}
-                    className="flex-1 bg-black border-2 border-green-500/50 text-green-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-950/40 hover:border-green-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
-                  >
-                    <Heart className="w-5 h-5"/> CHANGE TO SMASH
-                  </button>
-                </>
-              )
-            ) : (
-              // Fresh profile - show normal buttons
+        <div className="mt-2 flex gap-3">
+          {isOwnCard ? (
+            <button 
+              onClick={() => handleButton('dismiss')}
+              className="w-full bg-yellow-500 text-black py-4 md:py-5 rounded-2xl text-xs font-black uppercase flex items-center justify-center gap-3 active:scale-95 transition-transform"
+            >
+              <X className="w-5 h-5" /> DISMISS
+            </button>
+          ) : existingSwipe ? (
+            existingSwipe === 'SMASH' ? (
               <>
                 <button 
-                  onClick={() => processSwipe('left')}
-                  className="flex-1 bg-black border-2 border-red-600/50 text-red-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-950/40 hover:border-red-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                  onClick={() => handleButton('right')}
+                  className="flex-1 bg-green-900 border-2 border-green-500 text-green-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-800 transition-all flex items-center justify-center gap-2 active:scale-95"
                 >
-                  <ThumbsDown className="w-5 h-5"/> PASS
+                  <Heart className="w-5 h-5 fill-current"/> KEEP SMASH
                 </button>
                 <button 
-                  onClick={() => processSwipe('right')}
-                  className="flex-1 bg-black border-2 border-green-500/50 text-green-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-950/40 hover:border-green-500 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                  onClick={() => handleButton('left')}
+                  className="flex-1 bg-black border-2 border-red-600/50 text-red-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-950/40 hover:border-red-500 transition-all flex items-center justify-center gap-2 active:scale-95"
                 >
-                  <Heart className="w-5 h-5"/> SMASH
+                  <ThumbsDown className="w-5 h-5"/> CHANGE TO PASS
                 </button>
               </>
-            )}
-          </div>
-        )}
+            ) : (
+              <>
+                <button 
+                  onClick={() => handleButton('left')}
+                  className="flex-1 bg-red-900 border-2 border-red-500 text-red-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-800 transition-all flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <ThumbsDown className="w-5 h-5 fill-current"/> KEEP PASS
+                </button>
+                <button 
+                  onClick={() => handleButton('right')}
+                  className="flex-1 bg-black border-2 border-green-500/50 text-green-400 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-950/40 hover:border-green-500 transition-all flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Heart className="w-5 h-5"/> CHANGE TO SMASH
+                </button>
+              </>
+            )
+          ) : (
+            <>
+              <button 
+                onClick={() => handleButton('left')}
+                className="flex-1 bg-black border-2 border-red-600/50 text-red-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-red-950/40 hover:border-red-500 transition-all flex items-center justify-center gap-2 active:scale-95"
+              >
+                <ThumbsDown className="w-5 h-5"/> PASS
+              </button>
+              <button 
+                onClick={() => handleButton('right')}
+                className="flex-1 bg-black border-2 border-green-500/50 text-green-500 font-black text-xs md:text-sm py-4 md:py-5 rounded-2xl hover:bg-green-950/40 hover:border-green-500 transition-all flex items-center justify-center gap-2 active:scale-95"
+              >
+                <Heart className="w-5 h-5"/> SMASH
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </motion.div>
   );
-});
-
-SwipeCard.displayName = "SwipeCard";
+};
 
 // ============================================================================
-// FALLBACK SCORE CALCULATOR
+// FALLBACK SCORE
 // ============================================================================
 function calculateFallbackScore(target) {
   let score = 10;
