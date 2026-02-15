@@ -149,10 +149,21 @@ function LoginContent() {
       });
 
       if (error) {
-        setMessage({ 
-          type: "error", 
-          text: `REGISTRATION_ERROR: ${error.message.toUpperCase().replace(/\s+/g, '_')}`
-        });
+        // Check if it's a username conflict error from the database trigger
+        if (error.message.includes('duplicate') || 
+            error.message.includes('unique') || 
+            error.message.includes('username') ||
+            error.message.includes('profiles_username_key')) {
+          setMessage({ 
+            type: "error", 
+            text: `REGISTRATION_FAILED: USERNAME_[${username.toUpperCase()}]_ALREADY_EXISTS_CHOOSE_ANOTHER`
+          });
+        } else {
+          setMessage({ 
+            type: "error", 
+            text: `REGISTRATION_ERROR: ${error.message.toUpperCase().replace(/\s+/g, '_')}`
+          });
+        }
         setLoading(false);
         return;
       }
