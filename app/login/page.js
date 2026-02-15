@@ -90,6 +90,7 @@ function LoginContent() {
 
     setLoading(true);
 
+    // Check if username is taken
     const { data: existingUser } = await supabase
       .from("profiles")
       .select("username")
@@ -101,7 +102,8 @@ function LoginContent() {
       return setMessage({ type: "error", text: "ALIAS ALREADY TAKEN BY ANOTHER AGENT." });
     }
 
-    const { error } = await supabase.auth.signUp({
+    // Sign up with auto-confirm (no email verification needed)
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: { 
@@ -113,76 +115,64 @@ function LoginContent() {
     if (error) {
       setMessage({ type: "error", text: error.message.toUpperCase() });
       setLoading(false);
-    } else {
-      setMode("verify_signup");
-      setMessage({ type: "success", text: "8-DIGIT CODE SENT TO EMAIL. CHECK INBOX." });
-      setLoading(false);
+      return;
     }
-  };
 
-  const handleVerifySignup = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    // FIX: Remove accidental spaces from copy-pasting
-    const cleanOtp = otp.trim();
-    const cleanEmail = email.trim();
+    // Check if user needs email confirmation or is auto-confirmed
+    if (data?.user?.identities?.length === 0) {
+      // Email already exists
+      setMessage({ type: "error", text: "EMAIL ALREADY REGISTERED." });
+      setLoading(false);
+      return;
+    }
 
-    if (cleanOtp.length !== 8) {
-        setMessage({ type: "error", text: "INVALID FORMAT. EXACTLY 8 DIGITS REQUIRED." });
+    // If email confirmation is required by Supabase settings
+    if (data?.user && !data?.session) {
+      setMessage({ type: "success", text: "ACCOUNT CREATED. CHECK EMAIL TO VERIFY." });
+      setLoading(false);
+      return;
+    }
+
+    // User is auto-confirmed and logged in
+    if (data?.session) {
+      setMessage({ type: "success", text: "AGENT REGISTERED. ACCESS GRANTED..." });
+      
+      // Wait a moment for the session to fully establish
+      setTimeout(() => {
+        executeRedirect();
+      }, 1000);
+    } else {
+      setMessage({ type: "success", text: "ACCOUNT CREATED. LOGGING IN..." });
+      
+      // Try to sign in immediately
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ 
+        email: email.trim(), 
+        password 
+      });
+      
+      if (loginError) {
+        setMessage({ type: "error", text: "SIGNUP SUCCESS. PLEASE LOGIN MANUALLY." });
+        setMode("login");
         setLoading(false);
-        return;
-    }
-
-    const { data, error } = await supabase.auth.verifyOtp({ 
-        email: cleanEmail, 
-        token: cleanOtp, 
-        type: "signup" 
-    });
-
-    if (error) {
-      console.error("OTP Error:", error.message);
-      setMessage({ type: "error", text: "INVALID 8-DIGIT CODE OR EXPIRED TOKEN." });
-      setLoading(false);
-    } else {
-      setMessage({ type: "success", text: "IDENTITY VERIFIED. REDIRECTING..." });
-      executeRedirect();
+      } else {
+        setMessage({ type: "success", text: "ACCESS GRANTED. SYNCING..." });
+        executeRedirect();
+      }
     }
   };
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/reset-password`
+    });
+    
     if (error) {
       setMessage({ type: "error", text: error.message.toUpperCase() });
       setLoading(false);
     } else {
-      setMode("verify_recovery");
-      setMessage({ type: "success", text: "RECOVERY CODE SENT." });
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyRecovery = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    const cleanOtp = otp.trim();
-    const cleanEmail = email.trim();
-
-    const { error } = await supabase.auth.verifyOtp({ 
-        email: cleanEmail, 
-        token: cleanOtp, 
-        type: "recovery" 
-    });
-    
-    if (error) {
-      setMessage({ type: "error", text: "INVALID CODE." });
-      setLoading(false);
-    } else {
-      setMode("update_password");
-      setMessage({ type: "success", text: "CODE ACCEPTED. SET NEW PASSWORD." });
+      setMessage({ type: "success", text: "RECOVERY LINK SENT TO EMAIL. CHECK INBOX." });
       setLoading(false);
     }
   };
@@ -211,9 +201,7 @@ function LoginContent() {
     switch(mode) {
       case 'login': return { title: "Identity Verification", sub: "ENTER CREDENTIALS." };
       case 'signup': return { title: "New Operative", sub: "REGISTERING NEW AGENT." };
-      case 'verify_signup': return { title: "Confirm Identity", sub: "ENTER THE 8-DIGIT CODE." };
       case 'forgot_password': return { title: "Recovery", sub: "RESETTING PASSWORD." };
-      case 'verify_recovery': return { title: "Security Check", sub: "VERIFYING CODE." };
       case 'update_password': return { title: "Credentials", sub: "UPDATING PASSWORD." };
       default: return { title: "System Error", sub: "REBOOT REQUIRED." };
     }
@@ -261,7 +249,7 @@ function LoginContent() {
            <div className="p-8">
              <div className="text-center mb-8">
                <div className="inline-block p-3 rounded-full bg-white/5 mb-4 border border-white/10">
-                 {mode.includes('verify') ? <ShieldCheck className="w-8 h-8 text-green-500" /> : <Lock className="w-8 h-8 text-white" />}
+                 <Lock className="w-8 h-8 text-white" />
                </div>
                <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">{renderHeader().title}</h1>
                <p className="text-xs text-gray-500">{renderHeader().sub}</p>
@@ -284,12 +272,12 @@ function LoginContent() {
                      <input type="text" required value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="CODENAME" />
                    </div>
                    <div className="space-y-1">
-                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Phone className="w-3 h-3" /> Secure Line</label>
-                     <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="+91" />
+                     <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Phone className="w-3 h-3" /> Secure Line (Optional)</label>
+                     <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="+91" />
                    </div>
                  </>
                )}
-               {!['verify_signup', 'verify_recovery', 'update_password'].includes(mode) && (
+               {!['update_password'].includes(mode) && (
                  <div className="space-y-1">
                    <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><Mail className="w-3 h-3" /> Alias (Email)</label>
                    <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="agent@sandnco.lol" />
@@ -301,12 +289,6 @@ function LoginContent() {
                    <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-red-500 focus:bg-gray-900 transition-all" placeholder="••••••••" />
                  </div>
                )}
-               {['verify_signup', 'verify_recovery'].includes(mode) && (
-                 <div className="space-y-1">
-                   <label className="text-[10px] uppercase text-gray-500 tracking-widest flex items-center gap-2"><ShieldCheck className="w-3 h-3" /> 8-Digit Code</label>
-                   <input type="text" required value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full bg-gray-900/50 border border-gray-700 p-3 text-sm text-white focus:outline-none focus:border-green-500 focus:bg-gray-900 transition-all font-mono tracking-[0.6em] text-center" placeholder="00000000" maxLength={8} />
-                 </div>
-               )}
                {['login', 'signup'].includes(mode) && (
                  <div className="flex justify-center py-2">
                    <Turnstile sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY} theme="dark" onVerify={(token) => setTurnstileToken(token)} />
@@ -315,9 +297,7 @@ function LoginContent() {
                <button onClick={(e) => {
                    if (mode === 'login') handleLogin(e);
                    else if (mode === 'signup') handleSignup(e);
-                   else if (mode === 'verify_signup') handleVerifySignup(e);
                    else if (mode === 'forgot_password') handleForgotPassword(e);
-                   else if (mode === 'verify_recovery') handleVerifyRecovery(e);
                    else if (mode === 'update_password') handleUpdatePassword(e);
                  }} disabled={loading} className="w-full bg-white text-black font-black uppercase py-4 tracking-widest hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : "EXECUTE"}
@@ -334,7 +314,7 @@ function LoginContent() {
                {mode === 'signup' && (
                  <button onClick={() => { setMode('login'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white underline decoration-gray-700 transition-colors uppercase">ALREADY AN AGENT? LOGIN.</button>
                )}
-               {(mode === 'verify_signup' || mode === 'forgot_password' || mode === 'verify_recovery') && (
+               {mode === 'forgot_password' && (
                  <button onClick={() => { setMode('login'); setMessage(null); }} className="text-xs text-gray-500 hover:text-white transition-colors uppercase">← RETURN TO LOGIN</button>
                )}
              </div>
