@@ -39,7 +39,7 @@ export default function MinderHub() {
   const [swipeFeedback, setSwipeFeedback] = useState(null);
   
   const mounted = useRef(true);
-  const loadingMore = useRef(false);
+  const allProfilesLoaded = useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowInstructions(false), 3000);
@@ -47,34 +47,31 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // LOAD PROFILES (INFINITE)
+  // LOAD ALL PROFILES AT ONCE (TRUE INFINITE LOOP)
   // --------------------------------------------------------------------------
-  const loadProfiles = useCallback(async (append = false) => {
-    if (loadingMore.current) return;
-    loadingMore.current = true;
+  const loadAllProfiles = useCallback(async () => {
+    if (allProfilesLoaded.current) return;
 
+    console.log('🔄 Loading ALL profiles for infinite loop...');
+    
     try {
+      // Load ALL profiles from the database (no limit)
       const { data: rawProfiles, error } = await supabase
         .from('minder_targets')
         .select('id, alias, age, bio, image_url, instagram_id, user_id, redflag_score')
-        .order('created_at', { ascending: false })
-        .limit(20);
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
       if (!rawProfiles || !mounted.current) return;
 
-      if (append) {
-        setAllProfiles(prev => [...prev, ...rawProfiles]);
-      } else {
-        setAllProfiles(rawProfiles);
-      }
+      console.log(`✅ Loaded ${rawProfiles.length} total profiles for infinite loop`);
       
+      setAllProfiles(rawProfiles);
+      allProfilesLoaded.current = true;
       setLoading(false);
     } catch (err) {
       console.error("❌ Load profiles failed:", err);
       setLoading(false);
-    } finally {
-      loadingMore.current = false;
     }
   }, [supabase]);
 
@@ -230,12 +227,22 @@ export default function MinderHub() {
         
         refreshLeaderboard();
       })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'minder_targets'
+      }, async (payload) => {
+        // When a new profile is added, reload all profiles
+        console.log('🆕 New profile detected, reloading...');
+        allProfilesLoaded.current = false;
+        loadAllProfiles();
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, refreshLeaderboard]);
+  }, [supabase, refreshLeaderboard, loadAllProfiles]);
 
   // --------------------------------------------------------------------------
   // INITIALIZE
@@ -247,7 +254,7 @@ export default function MinderHub() {
       const { data: { session: activeSession } } = await supabase.auth.getSession();
       if (mounted.current) setSession(activeSession);
       
-      await loadProfiles(false);
+      await loadAllProfiles();
       
       if (activeSession?.user?.id) {
         await loadUserSwipes(activeSession.user.id);
@@ -269,23 +276,16 @@ export default function MinderHub() {
   }, []);
 
   // --------------------------------------------------------------------------
-  // INFINITE LOOP
+  // INFINITE LOOP - ADVANCE TO NEXT (WRAPS AROUND)
   // --------------------------------------------------------------------------
   const advanceToNext = useCallback(() => {
     setCurrentIndex(prev => {
-      const nextIndex = prev + 1;
-      
-      if (nextIndex >= allProfiles.length - 3) {
-        loadProfiles(true);
-      }
-      
-      if (nextIndex >= allProfiles.length) {
-        return 0;
-      }
-      
+      // True infinite loop: wrap back to 0 when reaching the end
+      const nextIndex = (prev + 1) % allProfiles.length;
+      console.log(`📍 Moving to card ${nextIndex + 1} of ${allProfiles.length}`);
       return nextIndex;
     });
-  }, [allProfiles.length, loadProfiles]);
+  }, [allProfiles.length]);
 
   // --------------------------------------------------------------------------
   // SAVE TO DATABASE - TRIPLE STRATEGY APPROACH
@@ -412,7 +412,6 @@ export default function MinderHub() {
           console.error('❌ ALL STRATEGIES FAILED');
           console.error('❌ Error details:', err3);
           console.error('❌ Please check your database table structure');
-          console.error('❌ Run the SQL commands in fix-minder-swipes-table.sql');
           return false;
         }
       }
@@ -476,7 +475,6 @@ export default function MinderHub() {
 
     if (!success) {
       console.error('❌ DATABASE SAVE FAILED - REVERTING UI');
-      alert('⚠️ Database save failed. Please check console and run the SQL fix commands.');
       
       // Revert
       setUserSwipes(prev => {
@@ -822,7 +820,7 @@ export default function MinderHub() {
               MINDER<span className="text-pink-600">_</span>
             </h1>
             <p className="text-[10px] font-black text-pink-500 uppercase bg-pink-900/20 px-4 py-1.5 rounded-full border border-pink-500/20 mt-3">
-              DEBUG MODE
+              INFINITE LOOP • {allProfiles.length} PROFILES
             </p>
           </div>
 
@@ -845,7 +843,7 @@ export default function MinderHub() {
           ) : !hasCards ? (
             <div className="text-pink-500 flex flex-col items-center gap-6">
               <Radar className="w-16 h-16 animate-spin opacity-50" />
-              <div className="text-xs uppercase font-black">LOADING MORE...</div>
+              <div className="text-xs uppercase font-black">NO PROFILES YET</div>
             </div>
           ) : (
             <div className="relative w-[95%] md:w-full h-[82dvh] md:h-full max-h-[800px]">
