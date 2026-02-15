@@ -149,14 +149,24 @@ function LoginContent() {
       });
 
       if (error) {
+        console.error('Signup error:', error);
+        
         // Check if it's a username conflict error from the database trigger
-        if (error.message.includes('duplicate') || 
-            error.message.includes('unique') || 
-            error.message.includes('username') ||
-            error.message.includes('profiles_username_key')) {
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes('duplicate') || 
+            errorMsg.includes('unique') || 
+            errorMsg.includes('username') ||
+            errorMsg.includes('profiles_username_key') ||
+            errorMsg.includes('saving new user') ||
+            errorMsg.includes('database error')) {
           setMessage({ 
             type: "error", 
-            text: `REGISTRATION_FAILED: USERNAME_[${username.toUpperCase()}]_ALREADY_EXISTS_CHOOSE_ANOTHER`
+            text: `USERNAME_CONFLICT: [${username.toUpperCase()}]_ALREADY_TAKEN_TRY_DIFFERENT_USERNAME`
+          });
+        } else if (errorMsg.includes('email')) {
+          setMessage({ 
+            type: "error", 
+            text: `EMAIL_CONFLICT: [${email}]_ALREADY_REGISTERED`
           });
         } else {
           setMessage({ 
