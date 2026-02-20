@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Siren, 
   Terminal, ChevronRight, LogOut, Flame, Crosshair, Zap,
-  Radar, Activity, MapPin, Power, ShoppingCart, ArrowRight
+  Radar, Activity, MapPin, CheckCircle, Power, ShoppingCart, ArrowRight
 } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
