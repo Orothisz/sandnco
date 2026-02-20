@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Activity, 
   Terminal, ChevronRight, Flame, Crosshair, Zap, Radar, 
-  Database, Network, Cpu, Code2, Layers, ShieldCheck, 
+  Database, Network, Cpu, Code2, Layers, ArrowRight, ShieldCheck, 
   BarChart3, Globe, Sparkles, ArrowUpRight, Github, Twitter
 } from "lucide-react";
 import Link from "next/link";
