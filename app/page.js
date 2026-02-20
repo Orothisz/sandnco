@@ -1,12 +1,12 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useTransform, useMotionTemplate, useSpring } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { 
   ShieldAlert, Fingerprint, Eye, Lock, Skull, Activity, 
   Terminal, ChevronRight, Flame, Crosshair, Zap, Radar, 
-  MapPin, CheckCircle, Power, ArrowRight, Database, 
-  Network, Cpu, Code2, Layers
+  Database, Network, Cpu, Code2, Layers, ShieldCheck, 
+  BarChart3, Globe, Sparkles, ArrowUpRight, Github, Twitter
 } from "lucide-react";
 import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -14,104 +14,63 @@ import { useRouter } from "next/navigation";
 import Head from "next/head";
 
 // ============================================================================
-// THE CORPORATE CATALOG (DYSTOPIAN STARTUP COPY)
+// THE SAAS CATALOG (DYSTOPIAN ENTERPRISE COPY)
 // ============================================================================
 const siteConfig = {
   hero: {
-    line1: "PREDICTIVE",
-    line2: "SERENDIPITY.",
-    subhead: "Optimizing human alignment through ruthless efficiency and deterministic data modeling.",
-    beta: "SECURE TERMINAL // SYSTEM V4.0",
+    tag: "SANDNCO V4.0 DEPLOYED",
+    line1: "HUMAN CAPITAL",
+    line2: "OPTIMIZED.",
+    subhead: "The world's first B2C platform for deterministic relationship lifecycle management. We don't wait for fate. We write the algorithm.",
   },
-  liveFeed: [
-    "DATA INGESTION: 450MB/s [NODE_12]",
-    "STATUS: CANDIDATE ENDORSED [SECTOR 15]",
-    "TRANSACTION VERIFIED: ASSET SEVERANCE",
-    "ALGORITHM: REAL-TIME BIAS TRAINING ACTIVE",
-    "NETWORK: AES-256 ENCRYPTION NOMINAL",
-  ],
-  services: [
-    {
-      id: "breakup",
-      title: "Asset Severance",
-      price: "₹0",
-      originalPrice: "₹999",
-      badge: "NULLIFICATION",
-      icon: <Skull className="w-6 h-6 md:w-8 md:h-8" />,
-      desc: "Clean, untraceable disengagement. We execute the termination protocol; you retain total deniability.",
-      features: ["Evidence Synthesis", "Mediation Routing"],
-      color: "text-rose-500",
-      bgHover: "group-hover:bg-rose-500/10",
-      glowColor: "rgba(244, 63, 94, 0.4)",
-      borderColor: "border-rose-500/30",
-      colSpan: "md:col-span-2 lg:col-span-2",
-    },
-    {
-      id: "patchup",
-      title: "State Restoration",
-      price: "₹0",
-      originalPrice: "₹1,499",
-      badge: "RECOVERY",
-      icon: <Network className="w-6 h-6 md:w-8 md:h-8" />,
-      desc: "Algorithmic memory optimization and social re-engagement routing.",
-      features: ["Behavioral Nudging", "Asset Re-acquisition"],
-      color: "text-blue-500",
-      bgHover: "group-hover:bg-blue-500/10",
-      glowColor: "rgba(59, 130, 246, 0.4)",
-      borderColor: "border-blue-500/30",
-      colSpan: "md:col-span-1 lg:col-span-1",
-    },
-    {
-      id: "matchup",
-      title: "Deterministic Pairing",
-      price: "₹0",
-      originalPrice: "₹1,999",
-      badge: "ACQUISITION",
-      icon: <Cpu className="w-6 h-6 md:w-8 md:h-8" />,
-      desc: "Curated local alignment targeting using aggregated biometric data.",
-      features: ["Geo-Fenced Syncing", "Profile Optimization"],
-      color: "text-emerald-500",
-      bgHover: "group-hover:bg-emerald-500/10",
-      glowColor: "rgba(16, 185, 129, 0.4)",
-      borderColor: "border-emerald-500/30",
-      colSpan: "md:col-span-1 lg:col-span-1",
-    },
-    {
-      id: "vip",
-      title: "The Black Box Tier",
-      price: "₹0",
-      originalPrice: "₹2,700",
-      badge: "CLASSIFIED",
-      icon: <Lock className="w-6 h-6 md:w-8 md:h-8" />,
-      desc: "Full-spectrum reality distortion. We manipulate the variables. You just arrive at the coordinates.",
-      features: ["24/7 Oversight", "NDA Mandated", "Zero Footprint"],
-      color: "text-purple-500",
-      bgHover: "group-hover:bg-purple-500/10",
-      glowColor: "rgba(168, 85, 247, 0.4)",
-      borderColor: "border-purple-500/30",
-      colSpan: "md:col-span-2 lg:col-span-2",
-    },
-  ],
+  metrics: [
+    { label: "Assets Severed", value: "14,204", suffix: "+" },
+    { label: "Pairings Executed", value: "99.8", suffix: "%" },
+    { label: "Moral Oversight", value: "0", suffix: "" },
+    { label: "Network Uptime", value: "99.99", suffix: "%" }
+  ]
 };
 
 // ============================================================================
-// 60FPS HARDWARE-ACCELERATED COMPONENTS
+// 60FPS HARDWARE-ACCELERATED CORE COMPONENTS
 // ============================================================================
-const NoiseOverlay = () => <div className="fixed inset-0 pointer-events-none z-[5] opacity-[0.08] mix-blend-screen hw-accel bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />;
+const NoiseOverlay = () => <div className="fixed inset-0 pointer-events-none z-[5] opacity-[0.06] mix-blend-screen hw-accel bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />;
+const CyberGrid = () => (
+  <div className="fixed inset-0 pointer-events-none z-0 hw-accel opacity-20 [mask-image:linear-gradient(to_bottom,white_20%,transparent_80%)]">
+    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:60px_60px] animate-grid-move-3d" />
+  </div>
+);
 
-// High-End RGB Split Text (Sleek Startup Glitch)
-const RGBSplitText = ({ text }) => {
+// High-End SaaS Animated Gradient Text
+const GradientText = ({ text, from = "from-white", via = "via-gray-200", to = "to-gray-500" }) => (
+  <span className={`text-transparent bg-clip-text bg-gradient-to-r ${from} ${via} ${to} animate-gradient-x`}>
+    {text}
+  </span>
+);
+
+// Typing Terminal Effect
+const TerminalBlock = () => {
+  const [text, setText] = useState("");
+  const fullText = ">\n> CONNECTING TO SECURE SILO...\n> AES-256 ENCRYPTION VERIFIED\n> BYPASSING ETHICS PROTOCOLS...\n> ACCESS GRANTED.";
+  
+  useEffect(() => {
+    let i = 0;
+    const interval = setInterval(() => {
+      setText(fullText.substring(0, i));
+      i++;
+      if (i > fullText.length) clearInterval(interval);
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="relative inline-block group hw-accel cursor-crosshair">
-      <span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-br from-white via-gray-200 to-gray-500 group-hover:text-white transition-colors duration-300">
-        {text}
-      </span>
-      <span className="absolute top-0 left-0 w-full h-full text-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mix-blend-screen pointer-events-none translate-x-[-3px] translate-y-[2px] hw-accel">
-        {text}
-      </span>
-      <span className="absolute top-0 left-0 w-full h-full text-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mix-blend-screen pointer-events-none translate-x-[3px] translate-y-[-2px] hw-accel">
-        {text}
-      </span>
+    <div className="bg-[#020202] border border-white/10 rounded-2xl p-6 font-mono text-[10px] md:text-xs text-emerald-500 shadow-inner h-full flex flex-col hw-layer">
+      <div className="flex gap-2 mb-4">
+        <div className="w-3 h-3 rounded-full bg-red-500/50" />
+        <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
+        <div className="w-3 h-3 rounded-full bg-green-500/50" />
+      </div>
+      <div className="whitespace-pre-wrap flex-1">{text}<span className="animate-pulse">_</span></div>
     </div>
   );
 };
@@ -123,11 +82,20 @@ export default function Home() {
   const router = useRouter();
   const supabase = createClientComponentClient();
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [agreed, setAgreed] = useState(true); 
-  const [progress, setProgress] = useState(0);
   const [gridLoading, setGridLoading] = useState(false);
+  const containerRef = useRef(null);
 
-  // HYPER-SPEED NAVIGATION ENGINE
+  // Smooth Scroll Parallax
+  const { scrollYProgress } = useScroll({ target: containerRef, offset: ["start start", "end end"] });
+  const yHero = useTransform(scrollYProgress, [0, 1], [0, 300]);
+  const opacityHero = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
+
+  // Mouse Tracking for dynamic glowing background
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const handleMouseMove = useCallback((e) => {
+    setMousePos({ x: e.clientX, y: e.clientY });
+  }, []);
+
   const handleGridNav = useCallback(() => {
     if (gridLoading) return;
     setGridLoading(true);
@@ -135,84 +103,39 @@ export default function Home() {
   }, [gridLoading, router]);
 
   useEffect(() => {
-    const checkUserAndWaiver = async () => {
+    const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setIsLoggedIn(!!session);
-      const waiverKey = 'sandnco_waiver_accepted';
-      const lastAccepted = localStorage.getItem(waiverKey);
-      if (!lastAccepted) setAgreed(false);
-      else if (new Date().getTime() - parseInt(lastAccepted) > 86400000) setAgreed(false);
     };
-    checkUserAndWaiver();
+    checkUser();
   }, [supabase]);
 
-  useEffect(() => {
-    if (!agreed) {
-      const timer = setInterval(() => {
-        setProgress(p => (p >= 100 ? 100 : p + Math.random() * 20));
-      }, 40);
-      return () => clearInterval(timer);
-    }
-  }, [agreed]);
-
-  // --------------------------------------------------------------------------
-  // WAIVER SCREEN (Corporate Compliance Popup)
-  // --------------------------------------------------------------------------
-  if (!agreed) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-[#020202] flex flex-col items-center justify-center p-6 text-center select-none hw-layer">
-        <NoiseOverlay />
-        <div className="max-w-md w-full bg-[#0a0a0c] border border-white/10 p-10 rounded-[2rem] shadow-[0_20px_80px_rgba(0,0,0,0.9)] relative z-10 hw-accel">
-          <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-white/10">
-            <ShieldAlert className="w-8 h-8 text-white" />
-          </div>
-          <h2 className="text-2xl font-black uppercase text-white mb-3 tracking-tight">Access Restricted</h2>
-          <p className="text-xs text-gray-400 leading-relaxed mb-8 font-medium">
-            SANDNCO is a satirical interactive data experiment. By engaging with this terminal, you accept all simulated operational risks. We claim zero liability for algorithmically bruised egos.
-          </p>
-          
-          {progress < 100 ? (
-            <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden relative">
-              <div className="h-full bg-white transition-all duration-75" style={{ width: `${progress}%`, transform: 'translateZ(0)' }} />
-            </div>
-          ) : (
-            <button onClick={() => { localStorage.setItem('sandnco_waiver_accepted', new Date().getTime().toString()); setAgreed(true); }} className="w-full py-4 bg-white text-black font-black uppercase tracking-widest active:scale-95 transition-transform rounded-xl hover:bg-gray-200">
-              Acknowledge & Proceed
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // MAIN HOMEPAGE
-  // --------------------------------------------------------------------------
   return (
-    <>
+    <div ref={containerRef} onMouseMove={handleMouseMove} className="min-h-screen bg-[#000000] text-gray-100 font-sans selection:bg-pink-500 selection:text-white relative hw-main overflow-x-hidden">
       <Head>
-        <title>SANDNCO | Algorithmic Curation</title>
+        <title>SANDNCO | Enterprise Human Capital Management</title>
       </Head>
 
       <Link href="/minder" className="hidden" prefetch={true} />
       <NoiseOverlay />
+      <CyberGrid />
       
-      {/* 60FPS Ambient Aurora Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 hw-accel opacity-40">
-        <div className="absolute -top-[20%] -left-[10%] w-[50vw] h-[50vw] rounded-full bg-indigo-600/20 blur-[120px] animate-blob-float mix-blend-screen" />
-        <div className="absolute top-[40%] -right-[10%] w-[40vw] h-[40vw] rounded-full bg-pink-600/10 blur-[120px] animate-blob-float animation-delay-2000 mix-blend-screen" />
-      </div>
+      {/* Dynamic Cursor Glow (Hardware Accelerated via translate3d) */}
+      <div 
+        className="pointer-events-none fixed top-0 left-0 w-[600px] h-[600px] bg-pink-600/10 rounded-full blur-[150px] z-0 transition-transform duration-500 ease-out hw-accel hidden md:block mix-blend-screen"
+        style={{ transform: `translate3d(${mousePos.x - 300}px, ${mousePos.y - 300}px, 0)` }}
+      />
 
-      {/* --- SLEEK STARTUP NAVBAR --- */}
-      <nav className="fixed top-0 w-full z-50 px-6 py-4 flex justify-between items-center bg-[#020202]/80 backdrop-blur-2xl border-b border-white/5 hw-layer">
+      {/* --- ENTERPRISE NAVBAR --- */}
+      <nav className="fixed top-0 w-full z-50 px-6 py-4 flex justify-between items-center bg-[#000000]/60 backdrop-blur-xl border-b border-white/5 hw-layer">
         <Link href="/" className="flex items-center gap-3 hw-accel group">
-          <div className="w-8 h-8 bg-white text-black flex items-center justify-center rounded-lg font-black text-lg group-hover:rotate-12 transition-transform">S</div>
-          <span className="font-black text-xl tracking-tighter text-white">SANDNCO.</span>
+          <div className="w-8 h-8 bg-white text-black flex items-center justify-center rounded-lg font-black text-lg group-hover:rotate-12 transition-transform shadow-[0_0_20px_rgba(255,255,255,0.3)]">S</div>
+          <span className="font-black text-xl tracking-tighter text-white">SANDNCO<span className="text-gray-500">.LOL</span></span>
         </Link>
         <div className="flex items-center gap-3 md:gap-6 hw-accel">
           
           <button onPointerDown={handleGridNav} disabled={gridLoading} className="group shrink-0 disabled:opacity-70">
-            <span className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-all text-[10px] md:text-xs font-black tracking-widest uppercase border ${gridLoading ? 'bg-white text-black border-white' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'}`}>
+            <span className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-all text-[10px] md:text-xs font-bold tracking-wider ${gridLoading ? 'bg-pink-600 text-white' : 'bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10'}`}>
               {gridLoading ? <Loader className="w-3 h-3 md:w-4 md:h-4 animate-spin" /> : <Layers className="w-3 h-3 md:w-4 md:h-4" />}
               <span className="hidden sm:inline">{gridLoading ? 'DECRYPTING...' : 'THE MINDER GRID'}</span>
             </span>
@@ -221,229 +144,260 @@ export default function Home() {
           {isLoggedIn ? (
             <div className="flex items-center gap-2 shrink-0">
               <Link href="/dashboard">
-                <button className="flex items-center justify-center gap-2 bg-white text-black px-4 py-2 rounded-full font-black text-[10px] md:text-xs tracking-widest hover:bg-gray-200 transition-colors uppercase">
+                <button className="flex items-center justify-center gap-2 bg-white text-black px-4 py-2 rounded-full font-bold text-[10px] md:text-xs tracking-wider hover:bg-gray-200 transition-colors">
                   <Terminal className="w-3 h-3 md:w-4 md:h-4" /> <span className="hidden sm:inline">DASHBOARD</span>
                 </button>
               </Link>
-              <button onClick={handleLogout} className="flex items-center justify-center text-gray-400 hover:text-white bg-white/5 p-2 rounded-full transition-colors border border-white/10 hover:bg-white/10">
+              <button onClick={() => { supabase.auth.signOut(); router.push('/'); }} className="flex items-center justify-center text-gray-400 hover:text-white bg-white/5 p-2 rounded-full transition-colors border border-white/10 hover:bg-white/10">
                 <Power className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <Link href="/login">
-              <button className="bg-white text-black px-6 py-2 rounded-full font-black text-[10px] md:text-xs tracking-widest hover:bg-gray-200 transition-colors active:scale-95 uppercase">
-                Login
+              <button className="bg-white text-black px-6 py-2 rounded-full font-bold text-[10px] md:text-xs tracking-wider hover:scale-105 active:scale-95 transition-transform shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                LOGIN / DEPLOY
               </button>
             </Link>
           )}
         </div>
       </nav>
 
-      <main className="bg-[#020202] text-white overflow-x-hidden font-sans relative hw-main">
-        
-        {/* --- Y-COMBINATOR STYLE HERO SECTION --- */}
-        <section className="relative min-h-[100dvh] flex flex-col justify-center items-center pt-24 px-6 overflow-hidden hw-layer">
+      {/* --- HERO SECTION --- */}
+      <motion.section style={{ y: yHero, opacity: opacityHero }} className="relative min-h-[100dvh] flex flex-col justify-center items-center pt-24 px-6 z-10 hw-accel">
+        <div className="relative text-center max-w-[1200px] w-full flex flex-col items-center">
           
-          <div className="relative z-20 text-center max-w-[1200px] w-full flex flex-col items-center hw-accel">
-            
-            <div className="inline-flex items-center gap-3 px-4 py-1.5 bg-black/50 border border-white/10 rounded-full mb-8 backdrop-blur-xl shadow-2xl">
-               <span className="w-2 h-2 bg-pink-500 rounded-full animate-ping" />
-               <span className="text-[9px] md:text-[10px] font-black tracking-[0.3em] text-gray-300 uppercase">{siteConfig.hero.beta}</span>
-            </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="inline-flex items-center gap-3 px-4 py-1.5 bg-white/5 border border-white/10 rounded-full mb-8 backdrop-blur-xl">
+             <Sparkles className="w-3 h-3 text-pink-500" />
+             <span className="text-[10px] font-mono tracking-widest text-gray-300 uppercase">{siteConfig.hero.tag}</span>
+          </motion.div>
 
-            <h1 className="text-[13vw] md:text-[8vw] leading-[0.85] font-black tracking-tighter mb-8">
-               <span className="block text-gray-400">{siteConfig.hero.line1}</span>
-               <span className="block mt-1 md:mt-2"><RGBSplitText text={siteConfig.hero.line2} /></span>
-            </h1>
+          <motion.h1 initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, type: "spring" }} className="text-[13vw] md:text-[9vw] leading-[0.85] font-black tracking-tighter mb-8 z-10">
+             <span className="block text-white drop-shadow-2xl">{siteConfig.hero.line1}</span>
+             <span className="block mt-1 md:mt-2"><GradientText text={siteConfig.hero.line2} from="from-pink-500" via="via-purple-500" to="to-indigo-500"/></span>
+          </motion.h1>
 
-            <p className="text-sm md:text-xl font-medium text-gray-400 mb-12 max-w-2xl leading-relaxed">
-              {siteConfig.hero.subhead}
-            </p>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-sm md:text-xl font-medium text-gray-400 mb-12 max-w-2xl leading-relaxed">
+            {siteConfig.hero.subhead}
+          </motion.p>
 
-            <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto px-4 relative z-30">
-              <Link href="/login?next=/request" className="w-full sm:w-auto">
-                  <button className="w-full sm:w-auto px-8 md:px-10 py-4 md:py-5 bg-white text-black font-black text-xs md:text-sm uppercase tracking-[0.2em] rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-3 hover:bg-gray-200 shadow-[0_0_40px_rgba(255,255,255,0.15)]">
-                    DEPLOY PROTOCOL <ArrowRight className="w-4 h-4 md:w-5 md:h-5" />
-                  </button>
-              </Link>
-            </div>
-          </div>
-        </section>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto px-4 z-20">
+            <Link href="/login?next=/request" className="w-full sm:w-auto">
+                <button className="w-full sm:w-auto px-8 md:px-10 py-4 md:py-5 bg-white text-black font-black text-xs md:text-sm uppercase tracking-[0.2em] rounded-full active:scale-95 transition-all flex items-center justify-center gap-3 hover:shadow-[0_0_40px_rgba(255,255,255,0.4)]">
+                  INITIALIZE PROTOCOL <ArrowRight className="w-4 h-4" />
+                </button>
+            </Link>
+            <Link href="#architecture" className="w-full sm:w-auto">
+                <button className="w-full sm:w-auto px-8 md:px-10 py-4 md:py-5 bg-white/5 border border-white/10 text-white font-bold text-xs md:text-sm uppercase tracking-[0.2em] rounded-full active:scale-95 transition-all flex items-center justify-center gap-3 hover:bg-white/10 backdrop-blur-md">
+                  READ DOCS
+                </button>
+            </Link>
+          </motion.div>
+        </div>
+      </motion.section>
 
-        {/* --- CORPORATE TICKER --- */}
-        <div className={`w-[120%] -ml-[10%] bg-white/5 border-y border-white/10 py-3 text-gray-400 font-mono text-[9px] md:text-[10px] uppercase tracking-[0.3em] overflow-hidden relative z-20 hw-accel hw-layer backdrop-blur-md`}>
-          <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-[#020202] to-transparent z-10" />
-          <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-[#020202] to-transparent z-10" />
-          <div className={`flex gap-12 whitespace-nowrap animate-marquee-left-3d hw-accel`}>
-            {[...siteConfig.liveFeed, ...siteConfig.liveFeed].map((t, i) => (
-              <span key={i} className="flex items-center gap-3 font-bold">
-                <Database className="w-3 h-3 text-pink-500" /> {t}
-              </span>
-            ))}
-          </div>
+      {/* --- CORPORATE METRICS STRIP --- */}
+      <section className="border-y border-white/5 bg-[#050505]/50 backdrop-blur-xl py-12 relative z-20 hw-layer">
+        <div className="max-w-[1400px] mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-white/5">
+          {siteConfig.metrics.map((metric, i) => (
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }} key={i} className="text-center px-4">
+              <div className="text-3xl md:text-5xl font-black text-white tracking-tighter mb-2">
+                {metric.value}<span className="text-pink-500">{metric.suffix}</span>
+              </div>
+              <div className="text-[10px] md:text-xs text-gray-500 uppercase tracking-widest font-bold">
+                {metric.label}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* --- BENTO BOX ARCHITECTURE (FEATURES) --- */}
+      <section id="architecture" className="px-4 md:px-10 lg:px-16 py-24 md:py-32 max-w-[1600px] mx-auto relative z-20 hw-layer">
+        
+        <div className="mb-16 md:mb-24 text-center">
+          <h2 className="text-3xl md:text-5xl font-black uppercase text-white tracking-tighter mb-4">
+            System <GradientText text="Architecture." from="from-gray-400" via="via-white" to="to-gray-400" />
+          </h2>
+          <p className="text-sm text-gray-500 font-medium max-w-2xl mx-auto">
+            Our proprietary suite of unethical relationship APIs. Seamlessly integrated. Flawlessly executed. Plausible deniability guaranteed.
+          </p>
         </div>
 
-        {/* --- THE BENTO BOX CATALOG (SAAS PRICING STYLE) --- */}
-        <section id="pricing" className="px-6 md:px-12 lg:px-20 py-24 md:py-32 max-w-[1400px] mx-auto hw-layer">
-           <div className="mb-16 text-center md:text-left">
-              <h2 className="text-4xl md:text-6xl font-black uppercase text-white tracking-tighter mb-4">
-                Operational <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-400 to-gray-600">Assets.</span>
-              </h2>
-              <p className="text-sm md:text-base font-medium text-gray-500">Select objective. Transfer data. Let the algorithm execute.</p>
-           </div>
-
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {siteConfig.services.map((service) => (
-                <div 
-                  key={service.id} 
-                  className={`group relative bg-[#08080a] border border-white/10 rounded-[2rem] p-8 md:p-10 flex flex-col justify-between overflow-hidden transition-all duration-300 hover:border-white/20 ${service.colSpan} hw-accel`}
-                >
-                  {/* Subtle Gradient Hover Injection */}
-                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-gradient-to-br from-transparent to-${service.color.split('-')[1]}-900/10 hw-accel`} />
-                  
-                  <div className="relative z-10">
-                     <div className="flex justify-between items-start mb-8">
-                       <div className={`p-4 bg-white/5 rounded-2xl border border-white/10 ${service.color} group-hover:scale-110 transition-transform duration-300`}>
-                         {service.icon}
-                       </div>
-                       <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-full border ${service.borderColor} ${service.color} bg-[#020202]`}>
-                         {service.badge}
-                       </span>
-                     </div>
-                     
-                     <h3 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white mb-3">
-                       {service.title}
-                     </h3>
-                     <p className="text-sm text-gray-400 leading-relaxed font-medium mb-8 max-w-sm">
-                       {service.desc}
-                     </p>
-                     
-                     <div className="space-y-3">
-                       {service.features.map((feat, idx) => (
-                         <div key={idx} className="flex items-center gap-3">
-                           <Code2 className={`w-4 h-4 ${service.color} opacity-70`} />
-                           <span className="text-[10px] md:text-xs font-bold text-gray-300 uppercase tracking-widest">{feat}</span>
-                         </div>
-                       ))}
-                     </div>
-                  </div>
-
-                  <div className="relative z-10 mt-12 pt-6 border-t border-white/10 flex justify-between items-end">
-                     <div>
-                        <span className="text-[10px] text-gray-500 line-through block font-black tracking-widest mb-1">{service.originalPrice}</span>
-                        <span className="text-3xl md:text-4xl font-black text-white">{service.price}</span>
-                     </div>
-                     <Link href="/login?next=/request">
-                        <button className="bg-white text-black px-6 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-widest hover:bg-gray-200 transition-colors active:scale-95 flex items-center gap-2 shadow-lg">
-                          Initiate <ArrowRight className="w-3 h-3" />
-                        </button>
-                     </Link>
-                  </div>
-                </div>
-              ))}
-           </div>
-        </section>
-
-        {/* --- THE MINDER GRID SAAS SHOWCASE --- */}
-        <section className="px-6 md:px-12 lg:px-20 pb-24 md:pb-32 max-w-[1400px] mx-auto hw-layer">
-           <div className="bg-[#050505] border border-white/10 p-8 md:p-16 rounded-[3rem] relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-16 shadow-2xl hw-accel group">
-             
-             {/* Dynamic Mesh Background inside card */}
-             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 pointer-events-none mix-blend-screen" />
-             <div className="absolute -bottom-[50%] -right-[20%] w-[80%] h-[100%] bg-pink-600/10 blur-[100px] pointer-events-none rounded-full group-hover:bg-pink-600/20 transition-colors duration-700" />
-
-             {/* Text Content */}
-             <div className="flex-1 text-center lg:text-left relative z-10">
-               <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-pink-500/10 border border-pink-500/30 text-pink-400 text-[9px] font-black tracking-[0.3em] uppercase mb-6 rounded-full">
-                 <Network className="w-3 h-3" /> BEHAVIORAL ENGINE
-               </div>
-               
-               <h2 className="text-5xl md:text-7xl font-black uppercase text-white mb-6 tracking-tighter">
-                 THE MINDER <span className="text-pink-500 italic">GRID.</span>
-               </h2>
-               
-               <p className="text-sm md:text-base text-gray-400 font-medium leading-relaxed max-w-xl mx-auto lg:mx-0 mb-10">
-                 The global candidate registry. Upload your biometric profile. Evaluate the demographic. <span className="text-white font-bold">Endorse</span> to align. <span className="text-gray-500 font-bold">Redact</span> to reject. Train the algorithm with your bias.
-               </p>
-               
-               <button onPointerDown={handleGridNav} disabled={gridLoading} className="w-full sm:w-auto bg-white text-black font-black uppercase px-8 py-5 tracking-[0.2em] rounded-2xl active:scale-95 transition-transform flex items-center justify-center gap-3 disabled:opacity-70 mx-auto lg:mx-0 text-[10px] md:text-xs">
-                 {gridLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />} 
-                 {gridLoading ? 'ESTABLISHING UPLINK...' : 'ACCESS THE DIRECTORY'}
-               </button>
-             </div>
-
-             {/* Minimalist UI Graphic representation */}
-             <div className="hidden lg:flex relative w-[320px] h-[480px] bg-[#020202] border border-white/10 rounded-[2.5rem] p-4 shadow-2xl rotate-[2deg] group-hover:rotate-0 transition-transform duration-700 hw-accel flex-col">
-                <div className="w-full h-full bg-[#0a0a0c] rounded-[1.5rem] overflow-hidden relative border border-white/5 flex flex-col">
-                  {/* Fake Image Area */}
-                  <div className="flex-1 bg-gradient-to-b from-gray-900 to-black relative">
-                    <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-2">
-                       <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                       <span className="text-[8px] text-white font-mono uppercase tracking-widest">Target_Active</span>
-                    </div>
-                  </div>
-                  {/* Fake Controls */}
-                  <div className="h-32 bg-[#050505] border-t border-white/5 p-4 flex flex-col gap-3 justify-end pb-6">
-                    <div className="h-3 w-1/2 bg-white/20 rounded-full" />
-                    <div className="h-2 w-3/4 bg-white/10 rounded-full mb-2" />
-                    <div className="flex gap-2">
-                      <div className="flex-1 h-10 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center"><span className="text-[8px] font-mono text-gray-500 uppercase tracking-widest">[ REDACT ]</span></div>
-                      <div className="flex-1 h-10 bg-white/10 rounded-xl border border-white/20 flex items-center justify-center"><span className="text-[8px] font-mono text-white uppercase tracking-widest">[ ENDORSE ]</span></div>
-                    </div>
-                  </div>
-                </div>
-             </div>
-           </div>
-        </section>
-
-        {/* --- COMPLIANCE FOOTER --- */}
-        <footer className="bg-[#020202] py-16 px-6 md:px-12 lg:px-20 border-t border-white/5 relative z-20 hw-layer">
-          <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center md:items-start gap-10">
-             
-             <div className="text-center md:text-left">
-               <div className="flex items-center justify-center md:justify-start gap-3 mb-4">
-                 <div className="w-6 h-6 bg-white text-black flex items-center justify-center rounded font-black text-xs">S</div>
-                 <h4 className="text-xl font-black tracking-tighter text-white">SANDNCO.LOL</h4>
-               </div>
-               <p className="text-[10px] text-gray-600 font-mono uppercase tracking-widest">Algorithmic Matchmaking Division.</p>
-             </div>
-             
-             <div className="flex flex-col items-center md:items-end gap-6">
-               <div className="flex gap-6 text-[10px] font-black uppercase tracking-widest text-gray-500">
-                 <Link href="/legal" className="hover:text-white transition-colors">Compliance / TOS</Link>
-                 <Link href="/legal" className="hover:text-white transition-colors">Data Privacy</Link>
-                 <a href="https://instagram.com/sandnco.lol" className="hover:text-white transition-colors">IG Uplink</a>
-               </div>
-             </div>
-          </div>
+        {/* CSS GRID BENTO BOX */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 auto-rows-[300px] md:auto-rows-[350px]">
           
-          <div className="max-w-[1400px] mx-auto mt-12 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-[8px] md:text-[9px] text-gray-700 uppercase tracking-widest font-bold leading-relaxed w-full">
-            <p className="max-w-4xl text-center md:text-left">
-              DISCLAIMER: SANDNCO IS AN INTERACTIVE SATIRICAL ENTERTAINMENT EXPERIENCE. NO REAL-WORLD OPERATIONS ARE CONDUCTED. STRICTLY 18+. ZERO TOLERANCE FOR ILLEGAL ACTIVITY OR THE SEXUALIZATION OF MINORS. ACCOUNTS VIOLATING SAFETY GUIDELINES WILL BE PURGED.
-            </p>
-            <p className="shrink-0">© {new Date().getFullYear()} SANDNCO SYSTEMS</p>
-          </div>
-        </footer>
-      </main>
+          {/* HUGE BENTO 1: THE MINDER GRID */}
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} className="md:col-span-2 lg:col-span-2 row-span-2 bg-[#0a0a0c] border border-white/5 rounded-[2rem] p-8 md:p-12 relative overflow-hidden group hw-accel">
+            <div className="absolute inset-0 bg-gradient-to-br from-pink-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative z-10 flex flex-col h-full">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-pink-500/10 border border-pink-500/20 text-pink-400 text-[10px] font-black tracking-widest uppercase mb-6 rounded-full w-fit">
+                <Network className="w-3 h-3" /> Core Database
+              </div>
+              <h3 className="text-4xl md:text-5xl font-black uppercase text-white tracking-tighter mb-4">The Minder Grid</h3>
+              <p className="text-sm text-gray-400 leading-relaxed max-w-md">
+                The global candidate registry. Upload biometric data. Evaluate the demographic. Endorse to align. Redact to reject. 
+              </p>
+              
+              <div className="mt-auto">
+                <button onPointerDown={handleGridNav} className="bg-white text-black px-6 py-3 rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 transition-transform flex items-center gap-2">
+                  Access Directory <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Decorative 3D Elements */}
+            <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-[#050505] border-[4px] border-white/5 rounded-[2rem] rotate-[-12deg] shadow-2xl group-hover:rotate-[-5deg] transition-transform duration-500 flex flex-col p-4">
+              <div className="w-full h-full border border-white/10 rounded-xl overflow-hidden relative">
+                <div className="absolute inset-0 bg-pink-500/20" />
+                <Crosshair className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 text-pink-500 opacity-50" />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* BENTO 2: ASSET SEVERANCE (BREAKUP) */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="md:col-span-1 lg:col-span-2 bg-gradient-to-br from-[#110505] to-[#050000] border border-red-500/20 rounded-[2rem] p-8 relative overflow-hidden group hw-accel">
+             <div className="relative z-10 h-full flex flex-col">
+                <Skull className="w-8 h-8 text-red-500 mb-6" />
+                <h3 className="text-2xl font-black uppercase text-white tracking-tight mb-2">Asset Severance</h3>
+                <p className="text-xs text-gray-400 leading-relaxed mb-6">Clean, untraceable disengagement. We execute the termination protocol; you retain total deniability.</p>
+                <div className="mt-auto flex justify-between items-end border-t border-red-500/20 pt-4">
+                  <span className="text-2xl font-black text-white">₹0</span>
+                  <Link href="/login?next=/request"><button className="text-xs font-bold text-red-400 hover:text-red-300 uppercase tracking-widest">Deploy →</button></Link>
+                </div>
+             </div>
+          </motion.div>
+
+          {/* BENTO 3: LIVE TERMINAL */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="md:col-span-1 lg:col-span-1 bg-transparent rounded-[2rem] overflow-hidden hw-accel hidden md:block">
+            <TerminalBlock />
+          </motion.div>
+
+          {/* BENTO 4: STATE RESTORATION (PATCHUP) */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="md:col-span-1 lg:col-span-1 bg-gradient-to-br from-[#050811] to-[#000511] border border-blue-500/20 rounded-[2rem] p-8 relative overflow-hidden group hw-accel">
+             <div className="relative z-10 h-full flex flex-col">
+                <Database className="w-8 h-8 text-blue-500 mb-6" />
+                <h3 className="text-2xl font-black uppercase text-white tracking-tight mb-2">State Restoration</h3>
+                <p className="text-xs text-gray-400 leading-relaxed mb-6">Algorithmic memory optimization and social re-engagement routing.</p>
+                <div className="mt-auto flex justify-between items-end border-t border-blue-500/20 pt-4">
+                  <span className="text-2xl font-black text-white">₹0</span>
+                  <Link href="/login?next=/request"><button className="text-xs font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest">Deploy →</button></Link>
+                </div>
+             </div>
+          </motion.div>
+
+          {/* BENTO 5: BLACK BOX (VIP) */}
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} className="md:col-span-2 lg:col-span-2 bg-[#0a0a0c] border border-white/5 rounded-[2rem] p-8 relative overflow-hidden group hw-accel flex flex-col justify-center items-center text-center">
+             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+             <Lock className="w-10 h-10 text-purple-500 mb-4 opacity-80 group-hover:scale-110 transition-transform" />
+             <h3 className="text-3xl font-black uppercase text-white tracking-tighter mb-2">The Black Box</h3>
+             <p className="text-sm text-gray-500 max-w-sm mb-6">Full-spectrum reality distortion. We manipulate the variables. You just arrive at the coordinates. NDA required.</p>
+             <Link href="/login?next=/request">
+               <button className="bg-white/10 border border-white/20 text-white px-6 py-2 rounded-full font-bold text-xs uppercase tracking-widest hover:bg-white hover:text-black transition-colors">
+                 Request Clearance
+               </button>
+             </Link>
+          </motion.div>
+
+        </div>
+      </section>
+
+      {/* --- FAKE "TRUST" / SATIRE BANNER --- */}
+      <section className="py-20 bg-[#020202] border-t border-white/5 relative z-20 hw-layer overflow-hidden">
+        <div className="absolute left-0 w-32 h-full bg-gradient-to-r from-[#020202] to-transparent z-10" />
+        <div className="absolute right-0 w-32 h-full bg-gradient-to-l from-[#020202] to-transparent z-10" />
+        <div className="flex gap-16 whitespace-nowrap animate-marquee-right-3d opacity-40 font-black text-2xl md:text-4xl text-gray-600 uppercase tracking-tighter mix-blend-screen hw-accel">
+           <span>SOC2 NON-COMPLIANT</span> <span>•</span>
+           <span>ETHICS-FREE ARCHITECTURE</span> <span>•</span>
+           <span>ZERO MORAL OVERSIGHT</span> <span>•</span>
+           <span>BANNED IN 14 JURISDICTIONS</span> <span>•</span>
+           <span>SOC2 NON-COMPLIANT</span> <span>•</span>
+           <span>ETHICS-FREE ARCHITECTURE</span> <span>•</span>
+        </div>
+      </section>
+
+      {/* --- STARTUP FOOTER --- */}
+      <footer className="bg-[#000000] pt-24 pb-12 px-6 md:px-16 border-t border-white/10 relative z-20 hw-layer">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+           
+           <div className="md:col-span-2">
+             <Link href="/" className="flex items-center gap-3 mb-6">
+               <div className="w-8 h-8 bg-white text-black flex items-center justify-center rounded-lg font-black text-lg">S</div>
+               <span className="font-black text-2xl tracking-tighter text-white">SANDNCO.</span>
+             </Link>
+             <p className="text-xs text-gray-500 font-medium leading-relaxed max-w-sm">
+               Engineering serendipity through aggressive data manipulation. Built with React, Supabase, and a fundamental disregard for algorithmic ethics.
+             </p>
+           </div>
+           
+           <div>
+             <h4 className="text-white font-black uppercase tracking-widest text-xs mb-6">Architecture</h4>
+             <ul className="space-y-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+               <li><button onPointerDown={handleGridNav} className="hover:text-white transition-colors">The Minder Grid</button></li>
+               <li><Link href="/login?next=/request" className="hover:text-white transition-colors">Asset Severance</Link></li>
+               <li><Link href="/login?next=/request" className="hover:text-white transition-colors">State Restoration</Link></li>
+             </ul>
+           </div>
+
+           <div>
+             <h4 className="text-white font-black uppercase tracking-widest text-xs mb-6">Compliance</h4>
+             <ul className="space-y-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+               <li><Link href="/legal" className="hover:text-white transition-colors">Terms of Service</Link></li>
+               <li><Link href="/legal" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+               <li><a href="https://instagram.com/sandnco.lol" className="hover:text-white transition-colors flex items-center gap-2">IG Uplink <ArrowUpRight className="w-3 h-3"/></a></li>
+             </ul>
+           </div>
+        </div>
+        
+        <div className="max-w-[1600px] mx-auto pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6 text-[9px] text-gray-600 uppercase tracking-widest font-bold leading-relaxed">
+          <p className="max-w-3xl text-center md:text-left flex items-center gap-2">
+             <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+             SANDNCO IS AN INTERACTIVE SATIRICAL ENTERTAINMENT EXPERIENCE. STRICTLY 18+. ZERO TOLERANCE FOR ILLEGAL ACTIVITY OR MINOR EXPLOITATION.
+          </p>
+          <p className="shrink-0 flex items-center gap-4">
+            <span>© {new Date().getFullYear()} SANDNCO SYSTEMS</span>
+          </p>
+        </div>
+      </footer>
 
       <style jsx global>{`
-        /* HW Acceleration Utilities */
+        /* HW Acceleration Core */
         .hw-accel { transform: translate3d(0,0,0); backface-visibility: hidden; will-change: transform; perspective: 1000px; }
         .hw-layer { contain: layout paint style; isolation: isolate; }
         .hw-main { isolation: isolate; transform: translateZ(0); }
         
+        /* 60FPS Infinite Marquees */
         @keyframes marqueeLeft3D { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-50%, 0, 0); } }
-        .animate-marquee-left-3d { animation: marqueeLeft3D 15s linear infinite; }
+        @keyframes marqueeRight3D { 0% { transform: translate3d(-50%, 0, 0); } 100% { transform: translate3d(0, 0, 0); } }
+        .animate-marquee-left-3d { animation: marqueeLeft3D 20s linear infinite; }
+        .animate-marquee-right-3d { animation: marqueeRight3D 20s linear infinite; }
 
+        /* Hardware Accelerated Grid Move */
+        @keyframes grid-move-3d {
+          0% { transform: perspective(1000px) rotateX(60deg) translate3d(0, 0, 0); }
+          100% { transform: perspective(1000px) rotateX(60deg) translate3d(0, 60px, 0); }
+        }
+        .animate-grid-move-3d { animation: grid-move-3d 3s linear infinite; }
+
+        /* Slow Float for Background Blobs */
         @keyframes blobFloat {
           0% { transform: translate3d(0px, 0px, 0) scale(1); }
-          33% { transform: translate3d(30px, -50px, 0) scale(1.1); }
-          66% { transform: translate3d(-20px, 20px, 0) scale(0.9); }
+          33% { transform: translate3d(50px, -50px, 0) scale(1.1); }
+          66% { transform: translate3d(-40px, 40px, 0) scale(0.9); }
           100% { transform: translate3d(0px, 0px, 0) scale(1); }
         }
-        .animate-blob-float { animation: blobFloat 20s infinite ease-in-out alternate; }
+        .animate-blob-float { animation: blobFloat 25s infinite ease-in-out alternate; }
         .animation-delay-2000 { animation-delay: 2s; }
+
+        /* Clean RGB Gradient Pan */
+        @keyframes gradient-x {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .animate-gradient-x {
+          background-size: 200% 200%;
+          animation: gradient-x 4s ease infinite;
+        }
       `}</style>
-    </>
+    </div>
   );
 }
